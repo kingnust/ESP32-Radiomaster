@@ -42,9 +42,9 @@ class CommandProcessor {
   void noteHostActivity();
   bool linkFresh(uint32_t nowMs) const;
   bool timeReached(uint32_t nowMs, uint32_t targetMs) const;
-  ChannelSetResult setHostChannelUs(uint8_t hostChannel, uint16_t microseconds);
-  bool canWriteHostChannel(uint8_t hostChannel) const;
-  uint8_t hostChannelToTrainerChannel(uint8_t hostChannel) const;
+  ChannelSetResult setHostChannelUs(uint32_t hostChannel, uint32_t microseconds);
+  bool canWriteHostChannel(uint32_t hostChannel) const;
+  uint8_t hostChannelToTrainerChannel(uint32_t hostChannel) const;
   void printHelp(Print &out) const;
   void printStatus(Print &out) const;
 };

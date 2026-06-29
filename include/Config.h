@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "sbus-link-2026-06-26";
+static constexpr const char *FirmwareVersion = "sbus-link-2026-06-29b";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.
@@ -36,11 +36,12 @@ static constexpr size_t ChannelCount = 16;
 static constexpr uint16_t ChannelMinUs = 988;
 static constexpr uint16_t ChannelMidUs = 1500;
 static constexpr uint16_t ChannelMaxUs = 2012;
-static constexpr uint16_t ArmSafeLowUs = 1000;
 
-// Default lockout protects existing radio controls. Commands can only write
-// channels 11-16 unless UNLOCK_PRIMARY I_UNDERSTAND is sent.
+// Default lockout protects existing radio controls. The host-facing channel
+// numbers are logical receiver outputs: CH11-CH26 map onto trainer inputs
+// TR1-TR16 in the 16-channel SBUS/CRSF frame.
 static constexpr uint8_t FirstHostWritableChannel = 11;
+static constexpr uint8_t LastHostWritableChannel = 26;
 
 static constexpr size_t MaxCommandLine = 192;
 

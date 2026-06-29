@@ -6,9 +6,6 @@ void ChannelState::resetToSafe() {
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     channels_[i] = Config::ChannelMidUs;
   }
-
-  // ELRS commonly uses AUX1/CH5 as the arm channel, so keep it low by default.
-  channels_[4] = Config::ArmSafeLowUs;
 }
 
 ChannelSetResult ChannelState::setUs(uint8_t oneBasedChannel, uint16_t microseconds) {

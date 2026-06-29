@@ -156,12 +156,11 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
     uint32_t value = 0;
     if (!parseUint(strtok_r(nullptr, " \t", &save), channel) ||
         !parseUint(strtok_r(nullptr, " \t", &save), value)) {
-      out.println(F("ERR usage: CH <1..16> <988..2012>"));
+      out.println(F("ERR usage: CH <11..26> <988..2012>"));
       return;
     }
 
-    const ChannelSetResult result =
-        setHostChannelUs(static_cast<uint8_t>(channel), static_cast<uint16_t>(value));
+    const ChannelSetResult result = setHostChannelUs(channel, value);
     if (result == ChannelSetResult::Ok) {
       noteHostActivity();
       out.println(F("OK channel updated"));
@@ -180,12 +179,11 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
         !parseUint(strtok_r(nullptr, " \t", &save), durationMs) ||
         durationMs < 100 ||
         durationMs > 10000) {
-      out.println(F("ERR usage: TEST <1..16> <988..2012> <100..10000 ms>"));
+      out.println(F("ERR usage: TEST <11..26> <988..2012> <100..10000 ms>"));
       return;
     }
 
-    const ChannelSetResult result =
-        setHostChannelUs(static_cast<uint8_t>(channel), static_cast<uint16_t>(value));
+    const ChannelSetResult result = setHostChannelUs(channel, value);
     if (result != ChannelSetResult::Ok) {
       out.println(channelSetResultText(result));
       return;
@@ -216,7 +214,10 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
     }
 
     const ChannelSetResult result =
-        channels_.setTransportUs(static_cast<uint8_t>(trainerChannel), static_cast<uint16_t>(value));
+        value < Config::ChannelMinUs || value > Config::ChannelMaxUs
+            ? ChannelSetResult::BadValue
+            : channels_.setTransportUs(static_cast<uint8_t>(trainerChannel),
+                                       static_cast<uint16_t>(value));
     if (result != ChannelSetResult::Ok) {
       out.println(channelSetResultText(result));
       return;
@@ -232,28 +233,32 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
   }
 
   if (strcmp(command, "FRAME") == 0) {
-    uint16_t pending[Config::ChannelCount];
+    uint32_t pending[Config::ChannelCount];
     for (size_t i = 0; i < Config::ChannelCount; ++i) pending[i] = channels_.getUs(i);
 
     for (size_t i = 0; i < Config::ChannelCount; ++i) {
       uint32_t value = 0;
       if (!parseUint(strtok_r(nullptr, " ,\t", &save), value)) {
-        out.println(F("ERR usage: FRAME <16 channel values>"));
+        out.println(F("ERR usage: FRAME <16 values for CH11..CH26>"));
+        return;
+      }
+      if (value < Config::ChannelMinUs || value > Config::ChannelMaxUs) {
+        out.print(F("ERR frame rejected at CH"));
+        out.print(static_cast<uint8_t>(Config::FirstHostWritableChannel + i));
+        out.print(F(": "));
+        out.println(channelSetResultText(ChannelSetResult::BadValue));
         return;
       }
       pending[i] = static_cast<uint16_t>(value);
     }
 
     for (size_t i = 0; i < Config::ChannelCount; ++i) {
-      const uint8_t channel = static_cast<uint8_t>(i + 1);
-      if (!canWriteHostChannel(channel)) {
-        continue;
-      }
+      const uint8_t channel = static_cast<uint8_t>(Config::FirstHostWritableChannel + i);
 
       const ChannelSetResult result = setHostChannelUs(channel, pending[i]);
       if (result != ChannelSetResult::Ok) {
         out.print(F("ERR frame rejected at CH"));
-        out.print(i + 1);
+        out.print(channel);
         out.print(F(": "));
         out.println(channelSetResultText(result));
         return;
@@ -419,23 +424,34 @@ bool CommandProcessor::timeReached(uint32_t nowMs, uint32_t targetMs) const {
   return static_cast<int32_t>(nowMs - targetMs) >= 0;
 }
 
-ChannelSetResult CommandProcessor::setHostChannelUs(uint8_t hostChannel, uint16_t microseconds) {
-  if (hostChannel < 1 || hostChannel > Config::ChannelCount) {
+ChannelSetResult CommandProcessor::setHostChannelUs(uint32_t hostChannel, uint32_t microseconds) {
+  if (hostChannel < 1 || hostChannel > Config::LastHostWritableChannel) {
     return ChannelSetResult::BadChannel;
+  }
+  if (microseconds < Config::ChannelMinUs || microseconds > Config::ChannelMaxUs) {
+    return ChannelSetResult::BadValue;
   }
   if (!canWriteHostChannel(hostChannel)) {
     return ChannelSetResult::PrimaryLocked;
   }
-  return channels_.setTransportUs(hostChannelToTrainerChannel(hostChannel), microseconds);
+  const uint8_t trainerChannel = hostChannelToTrainerChannel(hostChannel);
+  if (trainerChannel < 1 || trainerChannel > Config::ChannelCount) {
+    return ChannelSetResult::BadChannel;
+  }
+  return channels_.setTransportUs(trainerChannel, static_cast<uint16_t>(microseconds));
 }
 
-bool CommandProcessor::canWriteHostChannel(uint8_t hostChannel) const {
-  return channels_.primaryWritesAllowed() || hostChannel >= Config::FirstHostWritableChannel;
+bool CommandProcessor::canWriteHostChannel(uint32_t hostChannel) const {
+  if (hostChannel >= Config::FirstHostWritableChannel &&
+      hostChannel <= Config::LastHostWritableChannel) {
+    return true;
+  }
+  return channels_.primaryWritesAllowed() && hostChannel < Config::FirstHostWritableChannel;
 }
 
-uint8_t CommandProcessor::hostChannelToTrainerChannel(uint8_t hostChannel) const {
-  if (channels_.primaryWritesAllowed() || hostChannel < Config::FirstHostWritableChannel) {
-    return hostChannel;
+uint8_t CommandProcessor::hostChannelToTrainerChannel(uint32_t hostChannel) const {
+  if (hostChannel < Config::FirstHostWritableChannel) {
+    return static_cast<uint8_t>(hostChannel);
   }
   return static_cast<uint8_t>(hostChannel - Config::FirstHostWritableChannel + 1);
 }
@@ -448,10 +464,10 @@ void CommandProcessor::printHelp(Print &out) const {
   out.println(F("  LINK 1|0"));
   out.println(F("  STOP"));
   out.println(F("  SAFE"));
-  out.println(F("  CH <1..16> <988..2012>"));
-  out.println(F("  TEST <1..16> <988..2012> <100..10000 ms>"));
+  out.println(F("  CH <11..26> <988..2012>"));
+  out.println(F("  TEST <11..26> <988..2012> <100..10000 ms>"));
   out.println(F("  TESTRAW <TR 1..16> <988..2012> <100..10000 ms>"));
-  out.println(F("  FRAME <16 values>"));
+  out.println(F("  FRAME <16 values for CH11..CH26>"));
   out.println(F("  RATE <10..100>"));
   out.println(F("  PROTO CRSF|SBUS"));
   out.println(F("  SBUSINV 1|0"));
@@ -485,7 +501,13 @@ void CommandProcessor::printStatus(Print &out) const {
   out.print(crsfAddress_, HEX);
   out.print(F(" primary_unlocked="));
   out.print(channels_.primaryWritesAllowed() ? 1 : 0);
-  out.print(F(" channels="));
+  out.print(F(" host_map=CH"));
+  out.print(Config::FirstHostWritableChannel);
+  out.print(F("-CH"));
+  out.print(Config::LastHostWritableChannel);
+  out.print(F("->TR1-TR"));
+  out.print(static_cast<uint8_t>(Config::ChannelCount));
+  out.print(F(" trainer="));
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     if (i) out.print(',');
     out.print(channels_.getUs(i));

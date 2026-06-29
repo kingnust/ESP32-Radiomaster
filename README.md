@@ -104,10 +104,10 @@ quiet unless you send a command such as `HELP` or `STATUS`.
 - `LINK 1|0`
 - `STOP`
 - `SAFE`
-- `CH <1..16> <988..2012>`
-- `TEST <1..16> <988..2012> <100..10000 ms>`
+- `CH <11..26> <988..2012>`
+- `TEST <11..26> <988..2012> <100..10000 ms>`
 - `TESTRAW <TR 1..16> <988..2012> <100..10000 ms>`
-- `FRAME <16 channel values>`
+- `FRAME <16 values for CH11..CH26>`
 - `RATE <10..100>`
 - `PROTO CRSF|SBUS`
 - `SBUSINV 1|0`
@@ -116,8 +116,9 @@ quiet unless you send a command such as `HELP` or `STATUS`.
 - `LOCK_PRIMARY`
 
 By default, channels 1-10 are locked so laptop commands cannot overwrite existing
-radio controls. Channels 11-16 are writable. Channel 5 defaults low as a
-conservative arm-safe value.
+radio controls. Host commands can write logical receiver channels 11-26. Safe
+output keeps all trainer inputs neutral, so the bridge will not silently pull
+`TR5`/`CH15` low.
 
 `TR1`, `TR2`, etc. are EdgeTX trainer-input channels, not receiver output
 channels. The firmware maps laptop/output commands like this by default:
@@ -128,6 +129,16 @@ channels. The firmware maps laptop/output commands like this by default:
 - `CH 14 ...` -> trainer input `TR4`
 - `CH 15 ...` -> trainer input `TR5`
 - `CH 16 ...` -> trainer input `TR6`
+- `CH 17 ...` -> trainer input `TR7`
+- `CH 18 ...` -> trainer input `TR8`
+- `CH 19 ...` -> trainer input `TR9`
+- `CH 20 ...` -> trainer input `TR10`
+- `CH 21 ...` -> trainer input `TR11`
+- `CH 22 ...` -> trainer input `TR12`
+- `CH 23 ...` -> trainer input `TR13`
+- `CH 24 ...` -> trainer input `TR14`
+- `CH 25 ...` -> trainer input `TR15`
+- `CH 26 ...` -> trainer input `TR16`
 
 So to control receiver output channel 11, set the RadioMaster mix:
 
@@ -142,6 +153,18 @@ TEST 11 2000 5000
 ```
 
 This holds the SBUS channel value for 5 seconds, then returns to safe output.
+
+For receiver channel 26, set the RadioMaster mix:
+
+```text
+CH26 source = TR16
+```
+
+Then test it with:
+
+```text
+TEST 26 2000 5000
+```
 
 If `CH11 source = TR1` does not move, test the raw trainer input directly:
 
