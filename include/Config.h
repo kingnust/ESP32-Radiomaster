@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "sbus-link-2026-06-29b";
+static constexpr const char *FirmwareVersion = "sbus-link-2026-07-08";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.

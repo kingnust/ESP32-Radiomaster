@@ -8,7 +8,8 @@ constexpr uint8_t kStartByte = 0x0F;
 constexpr uint8_t kEndByte = 0x00;
 constexpr uint16_t kSbusMin = 172;
 constexpr uint16_t kSbusMid = 992;
-constexpr uint16_t kSbusMax = 1811;
+// EdgeTX SBUS trainer display reaches +100 at 1812. 1811 can show as +99.
+constexpr uint16_t kSbusMax = 1812;
 
 void packChannels(const uint16_t channelsUs[Config::ChannelCount], uint8_t payload[22]) {
   memset(payload, 0, 22);
