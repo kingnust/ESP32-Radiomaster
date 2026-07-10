@@ -1,9 +1,72 @@
 # ESP32-S3 RadioMaster Command Bridge
 
-This firmware runs on an ESP32-S3 SuperMini and accepts simple text commands
-from a laptop over Wi-Fi TCP or USB serial. It outputs RC channel frames to a
-RadioMaster/EdgeTX UART input using SBUS by default, with CRSF available as an
-optional output protocol.
+This firmware runs on an ESP32-S3 SuperMini and accepts control from a phone
+web app, a laptop over Wi-Fi TCP, or USB serial. It outputs RC channel frames to
+a RadioMaster/EdgeTX UART input or an ELRS/CRSF path. CRSF is the default for
+the phone-controller build, with SBUS still selectable for trainer-port setups.
+
+## Phone web app
+
+The ESP32 creates an access point:
+
+- SSID: `RM-Pocket-Bridge`
+- Password: `12345678`
+- App URL: `http://192.168.4.1/`
+- WebSocket control endpoint: `ws://192.168.4.1:7778/rc`
+
+Connect your phone to the ESP32 Wi-Fi network, open the app URL, then use the
+two on-screen sticks and RadioMaster-style switch row. The app sends RC frames
+at about 50 Hz. Firmware output becomes active when the on-screen `TRN PHONE`
+or `PHONE CONTROL` switch is ON. Turning it OFF, closing the app, losing Wi-Fi,
+or letting packets go stale returns the output to safe channel values.
+
+Default phone channel layout:
+
+- `CH1` roll
+- `CH2` pitch
+- `CH3` throttle
+- `CH4` yaw
+- `CH5` arm / `SA`
+- `CH6` angle / `SB`
+- `CH7` airmode / `SC`
+- `CH8` beep / `SD`
+- `CH9`-`CH12` extra AUX switches
+- `CH16` phone takeover flag, high while phone control is ON
+
+## Preventing radio-stick and phone-stick clash
+
+The ESP32 sends the phone channels, but EdgeTX/RadioMaster must decide when to
+use them. Configure the radio so the phone trainer inputs **replace** the normal
+sticks only when the phone takeover flag is high.
+
+For SBUS trainer mode:
+
+1. Select `SBUS` in the phone app.
+2. Set the connected RadioMaster serial port to `SBUS Trainer`.
+3. Create logical switch:
+
+```text
+L01 = TR16 > 1700
+```
+
+4. Add replacement mixer lines:
+
+```text
+CH1  REPLACE  TR1  switch=L01   ; roll
+CH2  REPLACE  TR2  switch=L01   ; pitch
+CH3  REPLACE  TR3  switch=L01   ; throttle
+CH4  REPLACE  TR4  switch=L01   ; yaw
+CH5  REPLACE  TR5  switch=L01   ; arm
+CH6  REPLACE  TR6  switch=L01   ; angle
+CH7  REPLACE  TR7  switch=L01   ; airmode
+CH8  REPLACE  TR8  switch=L01   ; beep
+```
+
+With `PHONE CONTROL` OFF, the RadioMaster sticks stay in charge. With
+`PHONE CONTROL` ON, `TR16` goes high and the phone channels replace the radio
+sticks.
+
+Keep props off for all setup and latency testing.
 
 ## Default wiring
 
@@ -23,7 +86,7 @@ Change pins in `include/Config.h` if your SuperMini is wired differently.
 
 ## RadioMaster serial-port setting
 
-Set the RadioMaster UART/serial-port function to `SBUS Trainer`. That is the
+For SBUS trainer use, set the RadioMaster UART/serial-port function to `SBUS Trainer`. That is the
 port mode that accepts external channel data and lets EdgeTX mix/send it onward
 through the radio link.
 
@@ -43,9 +106,10 @@ channel-control path:
 - `AUX1` is a generic auxiliary serial function, not trainer channel input.
 - `LUA` is for Lua-script serial access and would require a custom radio script.
 
-CRSF is still available with `PROTO CRSF`, but only use it if the RadioMaster
-port is configured for a CRSF trainer/input mode. If your menu only lists
-`SBUS Trainer`, keep the firmware on SBUS.
+CRSF is selected by default and is also available with `PROTO CRSF`, but only
+use it if the RadioMaster port or ELRS-side connection expects CRSF at 420 kbaud.
+If your menu only lists `SBUS Trainer`, select `SBUS` in the phone app or use
+`PROTO SBUS`.
 
 ## Wi-Fi command connection
 

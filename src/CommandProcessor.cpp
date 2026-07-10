@@ -356,6 +356,14 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
 }
 
 void CommandProcessor::serviceSafety(uint32_t nowMs, Print &log) {
+  if (phoneActive_) {
+    if (timeReached(nowMs, phoneHoldUntilMs_)) {
+      stopWithSafeBurst(nowMs);
+      log.println(F("Phone hold timeout: output returned to safe values."));
+    }
+    return;
+  }
+
   if (testActive_) {
     if (timeReached(nowMs, testUntilMs_)) {
       stopWithSafeBurst(nowMs);
@@ -370,7 +378,40 @@ void CommandProcessor::serviceSafety(uint32_t nowMs, Print &log) {
   }
 }
 
+void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::ChannelCount],
+                                       bool sendEnabled,
+                                       bool deadmanHeld,
+                                       uint32_t nowMs) {
+  if (channelsUs == nullptr || !sendEnabled || !deadmanHeld) {
+    if (phoneActive_ && !timeReached(nowMs, phoneHoldUntilMs_)) {
+      return;
+    }
+    if (outputEnabled_ || testActive_) {
+      stopWithSafeBurst(nowMs);
+    } else {
+      channels_.resetToSafe();
+    }
+    return;
+  }
+
+  for (size_t i = 0; i < Config::ChannelCount; ++i) {
+    channels_.setTransportUs(static_cast<uint8_t>(i + 1), channelsUs[i]);
+  }
+
+  outputEnabled_ = true;
+  phoneActive_ = true;
+  testActive_ = false;
+  linkEnabled_ = false;
+  safeBurstUntilMs_ = 0;
+  lastHostMs_ = nowMs;
+  phoneHoldUntilMs_ = nowMs + Config::PhoneFrameHoldMs;
+}
+
 bool CommandProcessor::shouldSendFrame(uint32_t nowMs) const {
+  if (phoneActive_) {
+    return !timeReached(nowMs, phoneHoldUntilMs_);
+  }
+
   return (outputEnabled_ && (linkFresh(nowMs) ||
                              (testActive_ && !timeReached(nowMs, testUntilMs_)))) ||
          linkEnabled_ ||
@@ -380,6 +421,14 @@ bool CommandProcessor::shouldSendFrame(uint32_t nowMs) const {
 bool CommandProcessor::shouldSendSafeFrame(uint32_t nowMs) const {
   return linkEnabled_ && !outputEnabled_ && !testActive_ && timeReached(nowMs, safeBurstUntilMs_);
 }
+
+bool CommandProcessor::outputEnabled() const { return outputEnabled_; }
+
+bool CommandProcessor::linkEnabled() const { return linkEnabled_; }
+
+bool CommandProcessor::testActive() const { return testActive_; }
+
+uint32_t CommandProcessor::lastHostMs() const { return lastHostMs_; }
 
 uint16_t CommandProcessor::outputRateHz() const { return outputRateHz_; }
 
@@ -408,8 +457,10 @@ uint32_t CommandProcessor::testRemainingMs(uint32_t nowMs) const {
 
 void CommandProcessor::stopWithSafeBurst(uint32_t nowMs) {
   outputEnabled_ = false;
+  phoneActive_ = false;
   testActive_ = false;
   testUntilMs_ = 0;
+  phoneHoldUntilMs_ = 0;
   channels_.resetToSafe();
   safeBurstUntilMs_ = nowMs + Config::SafeBurstMs;
 }

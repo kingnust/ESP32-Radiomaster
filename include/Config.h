@@ -4,13 +4,15 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "sbus-link-2026-07-08";
+static constexpr const char *FirmwareVersion = "phone-rc-2026-07-09";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.
 static constexpr const char *WifiSsid = "RM-Pocket-Bridge";
 static constexpr const char *WifiPassword = "12345678";
+static constexpr uint16_t WifiHttpPort = 80;
 static constexpr uint16_t WifiCommandPort = 7777;
+static constexpr uint16_t WifiWebSocketPort = 7778;
 
 static constexpr uint32_t UsbSerialBaud = 115200;
 
@@ -28,6 +30,10 @@ static constexpr uint8_t DefaultCrsfAddress = 0xEE;
 static constexpr uint16_t DefaultOutputRateHz = 100;
 static constexpr uint16_t MinOutputRateHz = 10;
 static constexpr uint16_t MaxOutputRateHz = 100;
+
+static constexpr uint16_t PhoneSendRateHz = 50;
+static constexpr uint32_t PhoneStatusIntervalMs = 200;
+static constexpr uint32_t PhoneFrameHoldMs = 250;
 
 static constexpr uint32_t HostTimeoutMs = 1000;
 static constexpr uint32_t SafeBurstMs = 300;

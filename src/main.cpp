@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "LineReader.h"
 #include "RadioUart.h"
+#include "WebAppServer.h"
 #include "WifiCommandServer.h"
 
 ChannelState channels;
@@ -12,6 +13,7 @@ ChannelState safeChannels;
 CommandProcessor commands(channels);
 RadioUart radio(Config::RadioUartNumber);
 WifiCommandServer wifiServer(commands);
+WebAppServer webApp(commands, channels);
 LineReader usbReader;
 
 char usbLine[Config::MaxCommandLine + 1] = {};
@@ -68,12 +70,14 @@ void setup() {
   safeChannels.resetToSafe();
   radio.begin(commands.protocol());
   wifiServer.begin(Serial);
+  webApp.begin(Serial);
 }
 
 void loop() {
   const uint32_t nowMs = millis();
 
   wifiServer.poll(Serial);
+  webApp.poll(Serial);
   handleUsbCommands();
   serviceRadioOutput(nowMs);
 

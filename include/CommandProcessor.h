@@ -12,9 +12,18 @@ class CommandProcessor {
 
   void handleLine(const char *line, Print &out);
   void serviceSafety(uint32_t nowMs, Print &log);
+  void applyPhoneFrame(const uint16_t channelsUs[Config::ChannelCount],
+                       bool sendEnabled,
+                       bool deadmanHeld,
+                       uint32_t nowMs);
 
   bool shouldSendFrame(uint32_t nowMs) const;
   bool shouldSendSafeFrame(uint32_t nowMs) const;
+  bool outputEnabled() const;
+  bool linkEnabled() const;
+  bool testActive() const;
+  bool linkFresh(uint32_t nowMs) const;
+  uint32_t lastHostMs() const;
   uint16_t outputRateHz() const;
   uint8_t crsfAddress() const;
   bool sbusInverted() const;
@@ -27,8 +36,10 @@ class CommandProcessor {
   ChannelState &channels_;
   bool outputEnabled_ = false;
   bool testActive_ = false;
+  bool phoneActive_ = false;
   bool linkEnabled_ = false;
   uint32_t lastHostMs_ = 0;
+  uint32_t phoneHoldUntilMs_ = 0;
   uint32_t safeBurstUntilMs_ = 0;
   uint32_t testUntilMs_ = 0;
   uint16_t outputRateHz_ = Config::DefaultOutputRateHz;
@@ -40,7 +51,6 @@ class CommandProcessor {
 
   void stopWithSafeBurst(uint32_t nowMs);
   void noteHostActivity();
-  bool linkFresh(uint32_t nowMs) const;
   bool timeReached(uint32_t nowMs, uint32_t targetMs) const;
   ChannelSetResult setHostChannelUs(uint32_t hostChannel, uint32_t microseconds);
   bool canWriteHostChannel(uint32_t hostChannel) const;
