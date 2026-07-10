@@ -44,7 +44,7 @@ const char kIndexHtml[] =
   --cyan:#5ee0d8;
   --purple:#b58cff;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{touch-action:none}
 .app{width:100vw;height:100svh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px;padding:6px max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
@@ -55,7 +55,7 @@ body{touch-action:none}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px rgba(255,90,102,.1)}
 .chip.ok .dot{background:var(--green);box-shadow:0 0 0 3px rgba(80,212,122,.12)}
 .seg{display:flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#12161c}
-button{font:inherit;color:inherit;border:0;background:none}
+button{font:inherit;color:inherit;border:0;background:none;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .seg button{height:20px;min-width:40px;border-radius:5px;color:var(--muted);font-size:10px;font-weight:800}
 .seg button.active{background:var(--panel2);color:var(--text)}
 .switches{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
@@ -200,8 +200,9 @@ button{font:inherit;color:inherit;border:0;background:none}
 (() => {
   const WS_PORT = 7778;
   const SEND_MS = 20;
-  const MIN = 1000, MID = 1500, MAX = 2000;
-  const CH_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Angle","Air","Beep","Aux5","Aux6","Aux7","Aux8","Aux9","Aux10","Aux11","Takeover"];
+  const MIN = 988, MID = 1500, MAX = 2012;
+  const SPAN = (MAX - MIN) / 2;
+  const CH_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Angle","Air","Beep","Aux5","Aux6","Aux7","Aux8","Takeover","Aux10","Aux11","Aux12"];
   const state = {
     ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
     left:{x:0,y:1}, right:{x:0,y:0},
@@ -211,8 +212,9 @@ button{font:inherit;color:inherit;border:0;background:none}
   const $ = (id) => document.getElementById(id);
   const clamp = (v,min,max) => Math.max(min, Math.min(max, v));
   const us = (v) => Math.round(clamp(v, MIN, MAX));
-  const axisUs = (v) => us(MID + v * 500);
-  const highLow = (v) => v ? 2000 : 1000;
+  const axisUs = (v) => us(MID + v * SPAN);
+  const throttleUs = (y) => us(MID - y * SPAN);
+  const highLow = (v) => v ? MAX : MIN;
 
   const monitor = $("monitor");
   const bars = [];
@@ -223,6 +225,9 @@ button{font:inherit;color:inherit;border:0;background:none}
     monitor.appendChild(row);
     bars.push({v:$("chv"+i), f:$("chf"+i)});
   }
+
+  document.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("selectstart", e => e.preventDefault());
 
   class Stick {
     constructor(el, data, opts) {
@@ -245,10 +250,8 @@ button{font:inherit;color:inherit;border:0;background:none}
       const radius = Math.min(r.width, r.height) * 0.39;
       const dx = clamp((e.clientX - cx) / radius, -1, 1);
       const dy = clamp((e.clientY - cy) / radius, -1, 1);
-      const mag = Math.hypot(dx, dy);
-      const scale = mag > 1 ? 1 / mag : 1;
-      this.data.x = dx * scale;
-      this.data.y = dy * scale;
+      this.data.x = dx;
+      this.data.y = dy;
       this.render();
     }
     up(e){
@@ -267,7 +270,7 @@ button{font:inherit;color:inherit;border:0;background:none}
   const rightStick = new Stick($("rightStick"), state.right, {});
 
   function channels(){
-    const throttle = state.sw.cut ? 1000 : us(1500 - state.left.y * 500);
+    const throttle = state.sw.cut ? MAX : throttleUs(state.left.y);
     const arm = state.sw.cut ? false : state.sw.arm;
     const ch = new Array(16).fill(1500);
     ch[0] = axisUs(state.right.x);
@@ -282,7 +285,7 @@ button{font:inherit;color:inherit;border:0;background:none}
     ch[9] = highLow(state.sw.aux6);
     ch[10] = highLow(state.sw.aux7);
     ch[11] = highLow(state.sw.aux8);
-    ch[15] = highLow(state.sw.master);
+    ch[12] = highLow(state.sw.master);
     return ch;
   }
 
