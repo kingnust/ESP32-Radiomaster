@@ -5,10 +5,11 @@
 
 #include "ChannelState.h"
 #include "CommandProcessor.h"
+#include "DirectRcLink.h"
 
 class WebAppServer {
  public:
-  WebAppServer(CommandProcessor &commands, ChannelState &channels);
+  WebAppServer(CommandProcessor &commands, ChannelState &channels, DirectRcLink &directRc);
 
   void begin(Print &log);
   void poll(Print &log);
@@ -16,6 +17,7 @@ class WebAppServer {
  private:
   CommandProcessor &commands_;
   ChannelState &channels_;
+  DirectRcLink &directRc_;
   WiFiServer httpServer_;
   WiFiServer wsServer_;
   WiFiClient wsClient_;
@@ -42,7 +44,8 @@ class WebAppServer {
   void handleWebSocketMessage(const char *message, Print &log);
   bool parsePhoneFrame(const char *message,
                        uint16_t channelsUs[Config::ChannelCount],
-                       bool &sendEnabled,
-                       bool &deadmanHeld);
+                       bool &trainerEnabled,
+                       bool &directEnabled,
+                       bool &directConfirmed);
   void sendStatus();
 };

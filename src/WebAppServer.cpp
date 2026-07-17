@@ -44,11 +44,12 @@ const char kIndexHtml[] =
   --cyan:#5ee0d8;
   --purple:#b58cff;
 }
+.routeSeg button{min-width:54px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{touch-action:none}
 .app{width:100vw;height:100svh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px;padding:6px max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
-.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;align-items:center}
+.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:5px;align-items:center}
 .title{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:800;letter-spacing:0;text-transform:uppercase;white-space:nowrap}
 .chips{display:flex;gap:4px;align-items:center;justify-content:flex-end;min-width:0}
 .chip{height:22px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:#151a21;color:var(--muted);display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;white-space:nowrap}
@@ -93,10 +94,11 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 .fill{height:100%;width:50%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:999px}
 .danger{color:var(--red)!important}.good{color:var(--green)!important}.warnText{color:var(--amber)!important}
 @media (orientation:portrait){
-  .top{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title seg" "chips chips";align-items:start}
+  .top{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"title route seg" "chips chips chips";align-items:start}
   .title{grid-area:title}
   .chips{grid-area:chips;justify-content:space-between}
-  .seg{grid-area:seg}
+  .routeSeg{grid-area:route}
+  .protoSeg{grid-area:seg}
   .switches{grid-template-columns:repeat(5,minmax(0,1fr))}
   .deck{grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr) auto}
   .deck .stickPanel:first-child{grid-column:1;grid-row:1}
@@ -145,7 +147,11 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       <div class="chip" id="sendChip"><i class="dot"></i><span id="sendText">SAFE</span></div>
       <div class="chip"><span id="rateText">50 Hz</span></div>
     </div>
-    <div class="seg">
+    <div class="seg routeSeg">
+      <button id="routeTrainer" class="active">TRAINER</button>
+      <button id="routeDirect">DIRECT</button>
+    </div>
+    <div class="seg protoSeg">
       <button id="protoCrsf">CRSF</button>
       <button id="protoSbus" class="active">SBUS</button>
     </div>
@@ -176,11 +182,12 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       <div class="telemetry">
         <div class="meter"><span>OUTPUT</span><b id="outState">safe</b></div>
         <div class="meter"><span>LINK AGE</span><b id="ageState">--</b></div>
-        <div class="meter"><span>PROTO</span><b id="protoState">SBUS</b></div>
+        <div class="meter"><span>ROUTE</span><b id="routeState">TRAINER</b></div>
         <div class="meter"><span>FRAMES</span><b id="frameState">0</b></div>
       </div>
       <button class="deadman" id="deadman">PHONE CONTROL OFF</button>
       <div class="trimGrid">
+        <button class="miniBtn" id="directConfirm">CONFIRM DIRECT</button>
         <button class="miniBtn" id="centerSticks">CENTER</button>
         <button class="miniBtn" id="zeroThrottle">THR LOW</button>
       </div>
@@ -205,6 +212,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const CH_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Angle","Air","Beep","Aux5","Aux6","Aux7","Aux8","Takeover","Aux10","Aux11","Aux12"];
   const state = {
     ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
+    route:"trainer", directConfirm:false, directReady:false, directActive:false, directAge:"--", directFrames:0, directErrors:0,
     left:{x:0,y:1}, right:{x:0,y:0},
     sw:{master:false, arm:false, angle:true, air:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
   };
@@ -270,7 +278,10 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const rightStick = new Stick($("rightStick"), state.right, {});
 
   function channels(){
-    const throttle = state.sw.cut ? MAX : throttleUs(state.left.y);
+    // Throttle cut must always command the minimum pulse. Sending MAX here
+    // makes the FC report THROTTLE and is unsafe in both trainer and direct
+    // routes.
+    const throttle = state.sw.cut ? MIN : throttleUs(state.left.y);
     const arm = state.sw.cut ? false : state.sw.arm;
     const ch = new Array(16).fill(1500);
     ch[0] = axisUs(state.right.x);
@@ -300,15 +311,24 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   function updateUi(){
     const ch = channels();
-    const active = state.connected && state.sw.master;
+    const trainerActive = state.connected && state.sw.master && state.route === "trainer";
+    const directActive = state.connected && state.sw.master && state.route === "direct" && state.directConfirm;
+    const active = trainerActive || directActive;
     updateBars(ch);
     setChip($("linkChip"), state.connected);
     setChip($("sendChip"), active);
     $("linkText").textContent = state.connected ? "ONLINE" : "OFFLINE";
-    $("sendText").textContent = active ? "PHONE" : "RADIO";
-    $("outState").textContent = active ? "phone" : "radio";
+    $("sendText").textContent = directActive ? "DIRECT" : (trainerActive ? "TRAINER" : "RADIO");
+    $("outState").textContent = directActive ? "direct" : (trainerActive ? "trainer" : "radio");
     $("outState").className = active ? "good" : "";
-    $("frameState").textContent = state.serverFrames || state.seq;
+    $("routeState").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT OK" : "DIRECT ?") : "TRAINER";
+    $("routeState").className = directActive ? "good" : (state.route === "direct" ? "warnText" : "");
+    $("frameState").textContent = state.route === "direct" ? (state.directFrames || 0) : (state.serverFrames || state.seq);
+    $("routeTrainer").classList.toggle("active", state.route === "trainer");
+    $("routeDirect").classList.toggle("active", state.route === "direct");
+    $("directConfirm").classList.toggle("danger", state.route === "direct" && !state.directConfirm);
+    $("directConfirm").classList.toggle("good", state.route === "direct" && state.directConfirm);
+    $("directConfirm").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT CONFIRMED" : "ARE YOU SURE?") : "CONFIRM DIRECT";
     $("deadman").classList.toggle("on", state.sw.master);
     $("deadman").textContent = state.sw.master ? "PHONE ON" : "PHONE OFF";
     for (const [key, value] of Object.entries(state.sw)) {
@@ -320,8 +340,10 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   function sendFrame(){
     const ch = channels();
     if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-    const enable = state.sw.master ? 1 : 0;
-    state.ws.send(["P", state.seq++, enable, enable, ...ch].join(","));
+    const trainer = state.route === "trainer" && state.sw.master ? 1 : 0;
+    const direct = state.route === "direct" && state.sw.master && state.directConfirm ? 1 : 0;
+    const confirm = state.route === "direct" && state.directConfirm ? 1 : 0;
+    state.ws.send(["P", state.seq++, trainer, direct, confirm, ...ch].join(","));
   }
 
   function sendCommand(line){
@@ -341,11 +363,15 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     if (!text.startsWith("S,")) return;
     const p = text.split(",");
     $("ageState").textContent = `${p[3] || "--"} ms`;
-    $("protoState").textContent = p[5] || "--";
     $("protoCrsf").classList.toggle("active", p[5] === "CRSF");
     $("protoSbus").classList.toggle("active", p[5] === "SBUS");
     state.serverFrames = Number(p[7] || 0);
     state.serverErrors = Number(p[8] || 0);
+    state.directReady = p[9] === "1";
+    state.directActive = p[10] === "1";
+    state.directAge = p[11] || "--";
+    state.directFrames = Number(p[12] || 0);
+    state.directErrors = Number(p[13] || 0);
     updateUi();
   }
 
@@ -353,6 +379,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     btn.addEventListener("click", () => {
       const key = btn.dataset.toggle;
       state.sw[key] = !state.sw[key];
+      if (key === "master" && state.route === "direct" && state.sw.master && !state.directConfirm) state.sw.master = false;
       if (key === "master" && !state.sw.master) state.sw.arm = false;
       if (key === "cut" && state.sw.cut) state.sw.arm = false;
       updateUi();
@@ -369,7 +396,16 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     btn.addEventListener("pointerleave", off);
   });
 
-  $("deadman").addEventListener("click", e => { e.preventDefault(); state.sw.master = !state.sw.master; if (!state.sw.master) state.sw.arm = false; updateUi(); });
+  $("deadman").addEventListener("click", e => {
+    e.preventDefault();
+    if (state.route === "direct" && !state.directConfirm) state.sw.master = false;
+    else state.sw.master = !state.sw.master;
+    if (!state.sw.master) state.sw.arm = false;
+    updateUi();
+  });
+  $("routeTrainer").addEventListener("click", () => { state.route = "trainer"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; updateUi(); sendFrame(); });
+  $("routeDirect").addEventListener("click", () => { state.route = "direct"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; updateUi(); sendFrame(); });
+  $("directConfirm").addEventListener("click", () => { if (state.route === "direct") { state.directConfirm = !state.directConfirm; if (!state.directConfirm) { state.sw.master = false; state.sw.arm = false; } updateUi(); sendFrame(); } });
   $("centerSticks").addEventListener("click", () => { state.left.x = 0; state.right.x = 0; state.right.y = 0; leftStick.render(); rightStick.render(); updateUi(); });
   $("zeroThrottle").addEventListener("click", () => { state.left.y = 1; state.sw.cut = true; state.sw.arm = false; leftStick.render(); updateUi(); });
   $("protoCrsf").addEventListener("click", () => sendCommand("PROTO CRSF"));
@@ -380,6 +416,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       state.deadman = false;
       state.sw.master = false;
       state.sw.arm = false;
+      state.directConfirm = false;
       sendFrame();
     }
   });
@@ -387,6 +424,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   window.addEventListener("beforeunload", () => {
     state.deadman = false;
     state.sw.master = false;
+    state.directConfirm = false;
     sendFrame();
   });
 
@@ -482,9 +520,10 @@ bool parseUintToken(char *token, uint32_t &value) {
 
 }  // namespace
 
-WebAppServer::WebAppServer(CommandProcessor &commands, ChannelState &channels)
+WebAppServer::WebAppServer(CommandProcessor &commands, ChannelState &channels, DirectRcLink &directRc)
     : commands_(commands),
       channels_(channels),
+      directRc_(directRc),
       httpServer_(Config::WifiHttpPort),
       wsServer_(Config::WifiWebSocketPort) {}
 
@@ -758,21 +797,29 @@ void WebAppServer::handleWebSocketMessage(const char *message, Print &log) {
   }
 
   uint16_t channelsUs[Config::ChannelCount] = {};
-  bool sendEnabled = false;
-  bool deadmanHeld = false;
-  if (!parsePhoneFrame(message, channelsUs, sendEnabled, deadmanHeld)) {
+  bool trainerEnabled = false;
+  bool directEnabled = false;
+  bool directConfirmed = false;
+  if (!parsePhoneFrame(message, channelsUs, trainerEnabled, directEnabled, directConfirmed)) {
     phoneErrors_++;
     return;
   }
 
-  commands_.applyPhoneFrame(channelsUs, sendEnabled, deadmanHeld, millis());
+  const uint32_t now = millis();
+  if (directEnabled) {
+    commands_.stopPhoneControl(now);
+  } else {
+    commands_.applyPhoneFrame(channelsUs, trainerEnabled, trainerEnabled, now);
+  }
+  directRc_.applyPhoneFrame(channelsUs, directEnabled, directConfirmed, now);
   phoneFrames_++;
 }
 
 bool WebAppServer::parsePhoneFrame(const char *message,
                                    uint16_t channelsUs[Config::ChannelCount],
-                                   bool &sendEnabled,
-                                   bool &deadmanHeld) {
+                                   bool &trainerEnabled,
+                                   bool &directEnabled,
+                                   bool &directConfirmed) {
   if (message == nullptr || channelsUs == nullptr) return false;
 
   char editable[kWsMessageMax] = {};
@@ -789,11 +836,15 @@ bool WebAppServer::parsePhoneFrame(const char *message,
 
   token = strtok_r(nullptr, ",", &save);
   if (!parseUintToken(token, parsed)) return false;
-  sendEnabled = parsed != 0;
+  trainerEnabled = parsed != 0;
 
   token = strtok_r(nullptr, ",", &save);
   if (!parseUintToken(token, parsed)) return false;
-  deadmanHeld = parsed != 0;
+  directEnabled = parsed != 0;
+
+  token = strtok_r(nullptr, ",", &save);
+  if (!parseUintToken(token, parsed)) return false;
+  directConfirmed = parsed != 0;
 
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     token = strtok_r(nullptr, ",", &save);
@@ -810,7 +861,7 @@ void WebAppServer::sendStatus() {
   char status[420];
   size_t used = snprintf(status,
                          sizeof(status),
-                         "S,%lu,%u,%lu,%u,%s,%u,%lu,%lu",
+                         "S,%lu,%u,%lu,%u,%s,%u,%lu,%lu,%u,%u,%lu,%lu,%lu",
                          static_cast<unsigned long>(now),
                          commands_.outputEnabled() ? 1 : 0,
                          static_cast<unsigned long>(commands_.lastHostMs() ? now - commands_.lastHostMs() : 0),
@@ -818,7 +869,12 @@ void WebAppServer::sendStatus() {
                          radioProtocolName(commands_.protocol()),
                          commands_.outputRateHz(),
                          static_cast<unsigned long>(phoneFrames_),
-                         static_cast<unsigned long>(phoneErrors_));
+                         static_cast<unsigned long>(phoneErrors_),
+                         directRc_.ready() ? 1 : 0,
+                         directRc_.active(now) ? 1 : 0,
+                         static_cast<unsigned long>(directRc_.ageMs(now)),
+                         static_cast<unsigned long>(directRc_.sentFrames()),
+                         static_cast<unsigned long>(directRc_.sendErrors()));
   if (used >= sizeof(status)) return;
 
   for (size_t i = 0; i < Config::ChannelCount && used < sizeof(status); ++i) {

@@ -17,6 +17,7 @@ class CommandProcessor {
                        bool deadmanHeld,
                        uint32_t nowMs);
 
+  void stopPhoneControl(uint32_t nowMs);
   bool shouldSendFrame(uint32_t nowMs) const;
   bool shouldSendSafeFrame(uint32_t nowMs) const;
   bool outputEnabled() const;

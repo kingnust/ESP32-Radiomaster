@@ -407,6 +407,12 @@ void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::Channel
   phoneHoldUntilMs_ = nowMs + Config::PhoneFrameHoldMs;
 }
 
+void CommandProcessor::stopPhoneControl(uint32_t nowMs) {
+  if (phoneActive_ || outputEnabled_ || testActive_) {
+    stopWithSafeBurst(nowMs);
+  }
+}
+
 bool CommandProcessor::shouldSendFrame(uint32_t nowMs) const {
   if (phoneActive_) {
     return !timeReached(nowMs, phoneHoldUntilMs_);

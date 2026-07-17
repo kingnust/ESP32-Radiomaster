@@ -6,6 +6,10 @@ void ChannelState::resetToSafe() {
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     channels_[i] = Config::ChannelMidUs;
   }
+  channels_[2] = Config::ChannelMinUs;  // throttle low
+  for (size_t i = 4; i < Config::ChannelCount; ++i) {
+    channels_[i] = Config::ChannelMinUs;  // arm and auxiliary switches off
+  }
 }
 
 ChannelSetResult ChannelState::setUs(uint8_t oneBasedChannel, uint16_t microseconds) {

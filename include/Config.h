@@ -14,6 +14,12 @@ static constexpr uint16_t WifiHttpPort = 80;
 static constexpr uint16_t WifiCommandPort = 7777;
 static constexpr uint16_t WifiWebSocketPort = 7778;
 
+static constexpr uint8_t DirectRcWifiChannel = 6;
+static constexpr uint16_t DirectRcSendRateHz = 100;
+static constexpr uint32_t DirectRcStopBurstMs = 140;
+static constexpr uint32_t DirectRcMagic = 0x31524344UL;  // "DRC1" little-endian
+static constexpr uint8_t DirectRcVersion = 1;
+
 static constexpr uint32_t UsbSerialBaud = 115200;
 
 // ESP32-S3 SuperMini defaults. These use commonly exposed pins on SuperMini

@@ -9,7 +9,7 @@ void WifiCommandServer::begin(Print &log) {
   WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
 
-  const bool started = WiFi.softAP(Config::WifiSsid, Config::WifiPassword);
+  const bool started = WiFi.softAP(Config::WifiSsid, Config::WifiPassword, Config::DirectRcWifiChannel, false, 4);
   if (!started) {
     log.println(F("Wi-Fi AP start failed."));
     return;
@@ -22,6 +22,8 @@ void WifiCommandServer::begin(Print &log) {
   log.println(Config::WifiSsid);
   log.print(F("Password: "));
   log.println(Config::WifiPassword);
+  log.print(F("Wi-Fi channel: "));
+  log.println(Config::DirectRcWifiChannel);
   log.print(F("Command endpoint: "));
   log.print(WiFi.softAPIP());
   log.print(':');

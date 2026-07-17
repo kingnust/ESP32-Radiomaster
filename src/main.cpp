@@ -3,6 +3,7 @@
 #include "ChannelState.h"
 #include "CommandProcessor.h"
 #include "Config.h"
+#include "DirectRcLink.h"
 #include "LineReader.h"
 #include "RadioUart.h"
 #include "WebAppServer.h"
@@ -11,9 +12,10 @@
 ChannelState channels;
 ChannelState safeChannels;
 CommandProcessor commands(channels);
+DirectRcLink directRc;
 RadioUart radio(Config::RadioUartNumber);
 WifiCommandServer wifiServer(commands);
-WebAppServer webApp(commands, channels);
+WebAppServer webApp(commands, channels, directRc);
 LineReader usbReader;
 
 char usbLine[Config::MaxCommandLine + 1] = {};
@@ -71,6 +73,7 @@ void setup() {
   radio.begin(commands.protocol());
   wifiServer.begin(Serial);
   webApp.begin(Serial);
+  directRc.begin(Serial);
 }
 
 void loop() {
@@ -79,6 +82,7 @@ void loop() {
   wifiServer.poll(Serial);
   webApp.poll(Serial);
   handleUsbCommands();
+  directRc.poll(nowMs, Serial);
   serviceRadioOutput(nowMs);
 
   // Leave this disabled unless you are actively debugging radio telemetry.
