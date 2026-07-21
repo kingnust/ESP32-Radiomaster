@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-aux";
+static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-replace-hb-ch10";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.
@@ -42,7 +42,8 @@ static constexpr uint16_t MaxOutputRateHz = 100;
 static constexpr uint16_t PhoneSendRateHz = 50;
 static constexpr uint32_t PhoneStatusIntervalMs = 200;
 static constexpr uint32_t PhoneFrameHoldMs = 250;
-static constexpr uint8_t TrainerMarkerChannel = 6;
+static constexpr uint8_t TrainerHeartbeatChannel = 16;
+static constexpr uint16_t TrainerHeartbeatBaseUs = 1250;
 static constexpr uint16_t TrainerHeartbeatDeltaUs = 20;
 
 static constexpr uint32_t HostTimeoutMs = 1000;

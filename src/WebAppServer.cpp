@@ -233,8 +233,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const SEND_MS = 20;
   const MIN = 988, MID = 1500, MAX = 2012;
   const SPAN = (MAX - MIN) / 2;
-  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Marker","Servo","Mode","Beep","Aux6","Aux7","Aux8","Takeover","Air","Run","Aux5"];
-  const DIRECT_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Servo","Task","Run","Param1","Param2","Param3","Param4","Beep","Reserve"];
+  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Run","Task","Servo","Aux5","Aux6","Aux7","Aux8","Beep","Heartbeat"];
+  const DIRECT_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Run","Task","Servo","Param1","Param2","Param3","Param4","Beep","Reserve"];
   const state = {
     ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
     route:"trainer", directConfirm:false, directReady:false, directActive:false, directAge:"--", directFrames:0, directErrors:0,
@@ -311,7 +311,6 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     const servo = us(MIN + (state.servo / 180) * (MAX - MIN));
     const mode = state.sw.hover ? MAX : (state.sw.angle ? MID : MIN);
     const taskSelector = {"1":1200,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1000;
-    const trainerTask = {"1":1300,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1250;
     const ch = new Array(16).fill(1500);
     ch[0] = axisUs(state.right.x);
     ch[1] = axisUs(-state.right.y);
@@ -319,23 +318,25 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     ch[3] = axisUs(state.left.x);
     ch[4] = highLow(arm);
     if (state.route === "trainer") {
-      ch[5] = !state.sw.master ? MIN : (state.taskExecute ? trainerTask : 1250);
-      ch[6] = servo;
-      ch[7] = mode;
-      ch[8] = highLow(state.sw.beep);
-      ch[9] = highLow(state.sw.aux6);
-      ch[10] = highLow(state.sw.aux7);
-      ch[11] = highLow(state.sw.aux8);
-      ch[12] = highLow(state.sw.master);
-      ch[13] = highLow(state.sw.air);
-      ch[14] = highLow(state.taskExecute && state.sw.master);
-      ch[15] = highLow(state.sw.aux5);
+      // EdgeTX Trainer -> Chans replaces the RadioMaster outputs directly, so
+      // trainer data must use the same CH1-CH16 layout as the receiver.
+      ch[5] = mode;
+      ch[6] = highLow(state.sw.air);
+      ch[7] = highLow(state.taskExecute && state.sw.master);
+      ch[8] = taskSelector;
+      ch[9] = servo;
+      ch[10] = highLow(state.sw.aux5);
+      ch[11] = highLow(state.sw.aux6);
+      ch[12] = highLow(state.sw.aux7);
+      ch[13] = highLow(state.sw.aux8);
+      ch[14] = highLow(state.sw.beep);
+      ch[15] = 1250;
     } else {
       ch[5] = mode;
       ch[6] = highLow(state.sw.air);
-      ch[7] = servo;
+      ch[7] = highLow(state.taskExecute && state.sw.master);
       ch[8] = taskSelector;
-      ch[9] = highLow(state.taskExecute && state.sw.master);
+      ch[9] = servo;
       ch[10] = highLow(state.sw.aux5);
       ch[11] = highLow(state.sw.aux6);
       ch[12] = highLow(state.sw.aux7);
@@ -347,7 +348,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   function updateBars(ch){
     for (let i=0;i<16;i++) {
-      bars[i].n.textContent = state.route === "trainer" ? `TR${i+1}/CH${i+11} ${TRAINER_NAMES[i]}` : `CH${i+1} ${DIRECT_NAMES[i]}`;
+      bars[i].n.textContent = state.route === "trainer" ? `TR${i+1}->CH${i+1} ${TRAINER_NAMES[i]}` : `CH${i+1} ${DIRECT_NAMES[i]}`;
       bars[i].v.textContent = ch[i];
       bars[i].f.style.width = `${clamp((ch[i]-1000)/10, 0, 100)}%`;
     }
@@ -883,7 +884,9 @@ void WebAppServer::handleWebSocketMessage(const char *message, Print &log) {
   } else {
     commands_.applyPhoneFrame(channelsUs, trainerEnabled, trainerEnabled, now);
   }
-  directRc_.applyPhoneFrame(channelsUs, trainerEnabled, directEnabled, directConfirmed, now);
+  // Trainer frames are replaced inside EdgeTX and then travel through ELRS.
+  // ESP-NOW is reserved for explicitly confirmed direct takeover only.
+  directRc_.applyPhoneFrame(channelsUs, false, directEnabled, directConfirmed, now);
   phoneFrames_++;
 }
 

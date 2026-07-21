@@ -397,12 +397,10 @@ void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::Channel
 
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     uint16_t value = channelsUs[i];
-    if (i + 1 == Config::TrainerMarkerChannel) {
-      const int32_t heartbeatValue = static_cast<int32_t>(value) +
+    if (i + 1 == Config::TrainerHeartbeatChannel) {
+      value = static_cast<uint16_t>(Config::TrainerHeartbeatBaseUs +
           (trainerHeartbeatHigh_ ? Config::TrainerHeartbeatDeltaUs
-                                 : -static_cast<int32_t>(Config::TrainerHeartbeatDeltaUs));
-      value = static_cast<uint16_t>(std::max<int32_t>(Config::ChannelMinUs,
-          std::min<int32_t>(Config::ChannelMaxUs, heartbeatValue)));
+                                 : -static_cast<int32_t>(Config::TrainerHeartbeatDeltaUs)));
     }
     channels_.setTransportUs(static_cast<uint8_t>(i + 1), value);
   }
