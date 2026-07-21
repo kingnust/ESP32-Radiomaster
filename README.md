@@ -20,24 +20,26 @@ at about 50 Hz. Firmware output becomes active when the on-screen `TRN PHONE`
 or `PHONE CONTROL` switch is ON. Turning it OFF, closing the app, losing Wi-Fi,
 or letting packets go stale returns the output to safe channel values.
 
-Default phone channel layout:
+Direct Wi-Fi channel layout:
 
-- `CH1` roll
-- `CH2` pitch
-- `CH3` throttle
-- `CH4` yaw
-- `CH5` arm / `SA`
-- `CH6` angle / `SB`
-- `CH7` airmode / `SC`
-- `CH8` beep / `SD`
-- `CH9`-`CH12` extra AUX switches
-- `CH16` phone takeover flag, high while phone control is ON
+- `CH1`-`CH4`: roll, pitch, throttle, yaw
+- `CH5`: arm
+- `CH6`: low acro, middle angle, high optical-flow hover
+- `CH7`: airmode
+- `CH8`: 0-180 degree positional servo
+- `CH9`/`CH10`: task selector and momentary execute
+- `CH11`-`CH16`: task parameters and reserved controls
+
+Trainer packets are EdgeTX inputs rather than receiver outputs. `TR1`-`TR5`
+carry roll, pitch, throttle, yaw, and arm. `TR6` is the phone heartbeat/task
+pulse, `TR7` is the servo, `TR8` is the flight mode, and `TR13` is the EdgeTX
+phone-takeover switch.
 
 ## Preventing radio-stick and phone-stick clash
 
-The ESP32 sends the phone channels, but EdgeTX/RadioMaster must decide when to
-use them. Configure the radio so the phone trainer inputs **replace** the normal
-sticks only when the phone takeover flag is high.
+EdgeTX must map trainer inputs into the reserved receiver outputs. Standard
+CRSF carries 16 receiver channels, so logical trainer channels `CH17`-`CH26`
+cannot be sent directly over a normal RC frame.
 
 For SBUS trainer mode:
 
@@ -46,25 +48,44 @@ For SBUS trainer mode:
 3. Create logical switch:
 
 ```text
-L01 = TR16 > 1700
+L01 = TR13 > 1700
 ```
 
 4. Add replacement mixer lines:
 
 ```text
-CH1  REPLACE  TR1  switch=L01   ; roll
-CH2  REPLACE  TR2  switch=L01   ; pitch
-CH3  REPLACE  TR3  switch=L01   ; throttle
-CH4  REPLACE  TR4  switch=L01   ; yaw
-CH5  REPLACE  TR5  switch=L01   ; arm
-CH6  REPLACE  TR6  switch=L01   ; angle
-CH7  REPLACE  TR7  switch=L01   ; airmode
-CH8  REPLACE  TR8  switch=L01   ; beep
+CH6   REPLACE  TR8  switch=L01   ; acro / angle / hover
+CH8   REPLACE  TR7  switch=L01   ; phone servo slider
+CH11  REPLACE  TR1  switch=L01   ; phone roll
+CH12  REPLACE  TR2  switch=L01   ; phone pitch
+CH13  REPLACE  TR3  switch=L01   ; phone throttle
+CH14  REPLACE  TR4  switch=L01   ; phone yaw
+CH15  REPLACE  TR5  switch=L01   ; phone arm
+CH16  REPLACE  TR6  switch=L01   ; heartbeat / task pulse
 ```
 
-With `PHONE CONTROL` OFF, the RadioMaster sticks stay in charge. With
-`PHONE CONTROL` ON, `TR16` goes high and the phone channels replace the radio
-sticks.
+Map the RadioMaster Pocket rear roller (`S1`) to normal output `CH8`. With
+phone control off, that roller drives the drone servo. During takeover, `TR7`
+replaces `CH8`, so the app slider drives the same servo. Use a three-position
+radio switch on `CH6`: low acro, middle angle, high optical-flow hover.
+
+The FC recognizes trainer-phone control only while transmitted `CH16` carries
+the reserved 1250 us heartbeat or a task pulse. A normal midpoint `CH16`, a
+stopped app, stale Wi-Fi, or safe frames cannot activate phone takeover.
+
+The momentary task codes are `1300` (forward preset), `1400` (right preset),
+`1600` (home), `1800` (task 1), and `2000` (task 2). The FC accepts one task
+edge only after seeing the 1250 us idle heartbeat again. Position requests
+expire after 500 ms if MTF02P position hold is not active, so a request made
+while disarmed or during a sensor fault cannot execute later without a new
+button press.
+
+Direct mode uses a versioned ESP-NOW packet with CRC, sequence tracking, a
+shared link ID, 100 Hz updates, and a 180 ms FC timeout. The shared ID rejects
+packets from a differently configured bridge before they can override the
+RadioMaster. `DirectRcLinkId` in `include/Config.h` must match
+`ESPFC_DRONE_PROTO_DIRECT_RC_LINK_ID` in the FC firmware if either value is
+changed.
 
 Keep props off for all setup and latency testing.
 
@@ -181,8 +202,9 @@ quiet unless you send a command such as `HELP` or `STATUS`.
 
 By default, channels 1-10 are locked so laptop commands cannot overwrite existing
 radio controls. Host commands can write logical receiver channels 11-26. Safe
-output keeps all trainer inputs neutral, so the bridge will not silently pull
-`TR5`/`CH15` low.
+output keeps roll, pitch, and yaw centered, throttle low, and every trainer
+auxiliary low. This explicitly turns off `TR5` arm, `TR6` takeover marker, and
+`TR13` phone takeover instead of leaving an old command latched.
 
 `TR1`, `TR2`, etc. are EdgeTX trainer-input channels, not receiver output
 channels. The firmware maps laptop/output commands like this by default:

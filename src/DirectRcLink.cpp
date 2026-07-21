@@ -10,6 +10,7 @@ constexpr uint8_t kBroadcastPeer[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
 struct __attribute__((packed)) DirectRcPacket {
   uint32_t magic;
+  uint32_t linkId;
   uint8_t version;
   uint8_t channelCount;
   uint8_t flags;
@@ -19,6 +20,8 @@ struct __attribute__((packed)) DirectRcPacket {
   uint16_t channels[Config::ChannelCount];
   uint16_t crc;
 };
+
+static_assert(sizeof(DirectRcPacket) == 52, "Direct RC packet layout changed");
 
 uint16_t crc16Ccitt(const uint8_t *data, size_t len) {
   uint16_t crc = 0xffff;
@@ -115,6 +118,7 @@ void DirectRcLink::poll(uint32_t nowMs, Print &log) {
 bool DirectRcLink::sendPacket(uint32_t nowMs, bool enabled) {
   DirectRcPacket packet = {};
   packet.magic = Config::DirectRcMagic;
+  packet.linkId = Config::DirectRcLinkId;
   packet.version = Config::DirectRcVersion;
   packet.channelCount = Config::ChannelCount;
   packet.flags = enabled ? 0x03 : 0x00;  // bit0=enabled, bit1=confirmed

@@ -48,7 +48,7 @@ const char kIndexHtml[] =
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{touch-action:none}
-.app{width:100vw;height:100svh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px;padding:6px max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
+.app{width:100vw;height:100svh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;gap:5px;padding:6px max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
 .top{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:5px;align-items:center}
 .title{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:800;letter-spacing:0;text-transform:uppercase;white-space:nowrap}
 .chips{display:flex;gap:4px;align-items:center;justify-content:flex-end;min-width:0}
@@ -87,6 +87,15 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 .trimGrid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .miniBtn{height:28px;border:1px solid var(--line);border-radius:6px;background:#151a21;color:var(--muted);font-size:10px;font-weight:800}
 .miniBtn:active{background:#242c38;color:var(--text)}
+.controlStrip{display:grid;grid-template-columns:minmax(110px,1.5fr) 54px minmax(100px,1fr) 54px;gap:4px;align-items:center;min-width:0}
+.servoControl{height:30px;display:grid;grid-template-columns:auto minmax(50px,1fr) 28px;gap:5px;align-items:center;color:var(--muted);font-size:8px;font-weight:800;min-width:0}
+.servoControl input{width:100%;min-width:0;accent-color:var(--cyan)}
+.servoControl b{color:var(--text);font-size:10px;text-align:right}
+.modeBtn,.taskBtn,.taskSelect{height:30px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:9px;font-weight:800;min-width:0}
+.modeBtn.on{border-color:rgba(80,212,122,.65);background:#1f3a2a;color:#dcffe7}
+.taskSelect{padding:0 5px;color:var(--text);background:#151a21}
+.taskBtn{color:var(--amber)}
+.taskBtn.on{border-color:rgba(245,189,79,.75);background:#423421;color:#fff1cf}
 .monitor{padding:5px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;min-height:52px}
 .bar{min-width:0}
 .bar label{display:flex;justify-content:space-between;gap:2px;font-size:7px;font-weight:800;color:var(--muted);line-height:1.1}
@@ -110,6 +119,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   .deadman{grid-column:1;min-height:34px}
   .trimGrid{grid-column:2}
   .monitor{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .controlStrip{grid-template-columns:minmax(100px,1.4fr) 48px minmax(92px,1fr) 48px}
 }
 @media (max-height:430px){
   .app{gap:3px;padding:4px max(4px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left))}
@@ -132,6 +142,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   .meter b{font-size:10px}
   .deadman{min-height:30px;font-size:9px}
   .miniBtn{height:23px;font-size:9px}
+  .servoControl,.modeBtn,.taskBtn,.taskSelect{height:24px}
   .monitor{min-height:38px;padding:3px;gap:3px;grid-template-columns:repeat(8,minmax(0,1fr))}
   .bar label{font-size:6px}
   .track{height:5px}
@@ -201,6 +212,19 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     </div>
   </section>
 
+  <section class="controlStrip">
+    <label class="servoControl"><span>SERVO</span><input id="servoRange" type="range" min="0" max="180" step="1" value="90"><b id="servoValue">90</b></label>
+    <button class="modeBtn" data-toggle="hover" id="hoverMode">HOVER</button>
+    <select class="taskSelect" id="taskSelect" aria-label="Position task">
+      <option value="1">FORWARD 1m</option>
+      <option value="2">RIGHT 1m</option>
+      <option value="3">HOME</option>
+      <option value="4">TASK 1</option>
+      <option value="5">TASK 2</option>
+    </select>
+    <button class="taskBtn" id="taskExecute">RUN</button>
+  </section>
+
   <section class="monitor" id="monitor"></section>
 </main>
 <script>
@@ -209,12 +233,13 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const SEND_MS = 20;
   const MIN = 988, MID = 1500, MAX = 2012;
   const SPAN = (MAX - MIN) / 2;
-  const CH_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Angle","Air","Beep","Aux5","Aux6","Aux7","Aux8","Takeover","Aux10","Aux11","Aux12"];
+  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Marker","Servo","Mode","Beep","Aux6","Aux7","Aux8","Takeover","Aux10","Aux11","Aux12"];
+  const DIRECT_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Servo","Task","Run","Param1","Param2","Param3","Param4","Beep","Reserve"];
   const state = {
     ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
     route:"trainer", directConfirm:false, directReady:false, directActive:false, directAge:"--", directFrames:0, directErrors:0,
-    left:{x:0,y:1}, right:{x:0,y:0},
-    sw:{master:false, arm:false, angle:true, air:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
+    left:{x:0,y:1}, right:{x:0,y:0}, servo:90, task:"1", taskExecute:false,
+    sw:{master:false, arm:false, angle:true, hover:false, air:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
   };
 
   const $ = (id) => document.getElementById(id);
@@ -229,9 +254,9 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   for (let i=0;i<16;i++) {
     const row = document.createElement("div");
     row.className = "bar";
-    row.innerHTML = `<label><span>CH${i+1} ${CH_NAMES[i]}</span><span id="chv${i}">1500</span></label><div class="track"><div class="fill" id="chf${i}"></div></div>`;
+    row.innerHTML = `<label><span id="chn${i}">CH${i+1} ${DIRECT_NAMES[i]}</span><span id="chv${i}">1500</span></label><div class="track"><div class="fill" id="chf${i}"></div></div>`;
     monitor.appendChild(row);
-    bars.push({v:$("chv"+i), f:$("chf"+i)});
+    bars.push({n:$("chn"+i), v:$("chv"+i), f:$("chf"+i)});
   }
 
   document.addEventListener("contextmenu", e => e.preventDefault());
@@ -283,25 +308,43 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     // routes.
     const throttle = state.sw.cut ? MIN : throttleUs(state.left.y);
     const arm = state.sw.cut ? false : state.sw.arm;
+    const servo = us(MIN + (state.servo / 180) * (MAX - MIN));
+    const mode = state.sw.hover ? MAX : (state.sw.angle ? MID : MIN);
+    const taskSelector = {"1":1200,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1000;
+    const trainerTask = {"1":1300,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1250;
     const ch = new Array(16).fill(1500);
     ch[0] = axisUs(state.right.x);
     ch[1] = axisUs(-state.right.y);
     ch[2] = throttle;
     ch[3] = axisUs(state.left.x);
     ch[4] = highLow(arm);
-    ch[5] = highLow(state.sw.angle);
-    ch[6] = highLow(state.sw.air);
-    ch[7] = highLow(state.sw.beep);
-    ch[8] = highLow(state.sw.aux5);
-    ch[9] = highLow(state.sw.aux6);
-    ch[10] = highLow(state.sw.aux7);
-    ch[11] = highLow(state.sw.aux8);
-    ch[12] = highLow(state.sw.master);
+    if (state.route === "trainer") {
+      ch[5] = !state.sw.master ? MIN : (state.taskExecute ? trainerTask : 1250);
+      ch[6] = servo;
+      ch[7] = mode;
+      ch[8] = highLow(state.sw.beep);
+      ch[9] = highLow(state.sw.aux6);
+      ch[10] = highLow(state.sw.aux7);
+      ch[11] = highLow(state.sw.aux8);
+      ch[12] = highLow(state.sw.master);
+    } else {
+      ch[5] = mode;
+      ch[6] = highLow(state.sw.air);
+      ch[7] = servo;
+      ch[8] = taskSelector;
+      ch[9] = highLow(state.taskExecute && state.sw.master);
+      ch[10] = highLow(state.sw.aux5);
+      ch[11] = highLow(state.sw.aux6);
+      ch[12] = highLow(state.sw.aux7);
+      ch[13] = highLow(state.sw.aux8);
+      ch[14] = highLow(state.sw.beep);
+    }
     return ch;
   }
 
   function updateBars(ch){
     for (let i=0;i<16;i++) {
+      bars[i].n.textContent = state.route === "trainer" ? `TR${i+1}/CH${i+11} ${TRAINER_NAMES[i]}` : `CH${i+1} ${DIRECT_NAMES[i]}`;
       bars[i].v.textContent = ch[i];
       bars[i].f.style.width = `${clamp((ch[i]-1000)/10, 0, 100)}%`;
     }
@@ -331,6 +374,9 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     $("directConfirm").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT CONFIRMED" : "ARE YOU SURE?") : "CONFIRM DIRECT";
     $("deadman").classList.toggle("on", state.sw.master);
     $("deadman").textContent = state.sw.master ? "PHONE ON" : "PHONE OFF";
+    $("servoValue").textContent = state.servo;
+    $("hoverMode").textContent = state.sw.hover ? "HOLD" : (state.sw.angle ? "ANGLE" : "ACRO");
+    $("taskExecute").classList.toggle("on", state.taskExecute);
     for (const [key, value] of Object.entries(state.sw)) {
       document.querySelectorAll(`[data-toggle="${key}"]`).forEach(btn => btn.classList.toggle("on", value));
     }
@@ -354,7 +400,16 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}/rc`);
     state.ws = ws;
     ws.onopen = () => { state.connected = true; updateUi(); ws.send("Q"); };
-    ws.onclose = () => { state.connected = false; state.deadman = false; state.sw.master = false; updateUi(); setTimeout(connect, 700); };
+    ws.onclose = () => {
+      state.connected = false;
+      state.deadman = false;
+      state.sw.master = false;
+      state.sw.arm = false;
+      state.taskExecute = false;
+      state.directConfirm = false;
+      updateUi();
+      setTimeout(connect, 700);
+    };
     ws.onerror = () => { try { ws.close(); } catch(e) {} };
     ws.onmessage = (ev) => handleStatus(String(ev.data));
   }
@@ -381,7 +436,10 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       state.sw[key] = !state.sw[key];
       if (key === "master" && state.route === "direct" && state.sw.master && !state.directConfirm) state.sw.master = false;
       if (key === "master" && !state.sw.master) state.sw.arm = false;
+      if (key === "master" && !state.sw.master) state.taskExecute = false;
       if (key === "cut" && state.sw.cut) state.sw.arm = false;
+      if (key === "hover" && state.sw.hover) state.sw.angle = true;
+      if (key === "angle" && !state.sw.angle) state.sw.hover = false;
       updateUi();
     });
   });
@@ -400,14 +458,22 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     e.preventDefault();
     if (state.route === "direct" && !state.directConfirm) state.sw.master = false;
     else state.sw.master = !state.sw.master;
-    if (!state.sw.master) state.sw.arm = false;
+    if (!state.sw.master) { state.sw.arm = false; state.taskExecute = false; }
     updateUi();
   });
-  $("routeTrainer").addEventListener("click", () => { state.route = "trainer"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; updateUi(); sendFrame(); });
-  $("routeDirect").addEventListener("click", () => { state.route = "direct"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; updateUi(); sendFrame(); });
-  $("directConfirm").addEventListener("click", () => { if (state.route === "direct") { state.directConfirm = !state.directConfirm; if (!state.directConfirm) { state.sw.master = false; state.sw.arm = false; } updateUi(); sendFrame(); } });
+  $("routeTrainer").addEventListener("click", () => { state.route = "trainer"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; state.taskExecute = false; updateUi(); sendFrame(); });
+  $("routeDirect").addEventListener("click", () => { state.route = "direct"; state.directConfirm = false; state.sw.master = false; state.sw.arm = false; state.taskExecute = false; updateUi(); sendFrame(); });
+  $("directConfirm").addEventListener("click", () => { if (state.route === "direct") { state.directConfirm = !state.directConfirm; if (!state.directConfirm) { state.sw.master = false; state.sw.arm = false; state.taskExecute = false; } updateUi(); sendFrame(); } });
   $("centerSticks").addEventListener("click", () => { state.left.x = 0; state.right.x = 0; state.right.y = 0; leftStick.render(); rightStick.render(); updateUi(); });
   $("zeroThrottle").addEventListener("click", () => { state.left.y = 1; state.sw.cut = true; state.sw.arm = false; leftStick.render(); updateUi(); });
+  $("servoRange").addEventListener("input", e => { state.servo = clamp(Number(e.target.value), 0, 180); updateUi(); });
+  $("taskSelect").addEventListener("change", e => { state.task = String(e.target.value); updateUi(); });
+  const taskOn = e => { e.preventDefault(); if (state.sw.master && state.sw.hover) { state.taskExecute = true; updateUi(); sendFrame(); } };
+  const taskOff = e => { e.preventDefault(); if (state.taskExecute) { state.taskExecute = false; updateUi(); sendFrame(); } };
+  $("taskExecute").addEventListener("pointerdown", taskOn);
+  $("taskExecute").addEventListener("pointerup", taskOff);
+  $("taskExecute").addEventListener("pointercancel", taskOff);
+  $("taskExecute").addEventListener("pointerleave", taskOff);
   $("protoCrsf").addEventListener("click", () => sendCommand("PROTO CRSF"));
   $("protoSbus").addEventListener("click", () => sendCommand("PROTO SBUS"));
 
@@ -416,6 +482,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       state.deadman = false;
       state.sw.master = false;
       state.sw.arm = false;
+      state.taskExecute = false;
       state.directConfirm = false;
       sendFrame();
     }
@@ -424,6 +491,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   window.addEventListener("beforeunload", () => {
     state.deadman = false;
     state.sw.master = false;
+    state.sw.arm = false;
+    state.taskExecute = false;
     state.directConfirm = false;
     sendFrame();
   });

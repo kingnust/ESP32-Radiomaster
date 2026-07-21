@@ -1,5 +1,6 @@
 #include "CommandProcessor.h"
 
+#include <algorithm>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -395,8 +396,17 @@ void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::Channel
   }
 
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
-    channels_.setTransportUs(static_cast<uint8_t>(i + 1), channelsUs[i]);
+    uint16_t value = channelsUs[i];
+    if (i + 1 == Config::TrainerMarkerChannel) {
+      const int32_t heartbeatValue = static_cast<int32_t>(value) +
+          (trainerHeartbeatHigh_ ? Config::TrainerHeartbeatDeltaUs
+                                 : -static_cast<int32_t>(Config::TrainerHeartbeatDeltaUs));
+      value = static_cast<uint16_t>(std::max<int32_t>(Config::ChannelMinUs,
+          std::min<int32_t>(Config::ChannelMaxUs, heartbeatValue)));
+    }
+    channels_.setTransportUs(static_cast<uint8_t>(i + 1), value);
   }
+  trainerHeartbeatHigh_ = !trainerHeartbeatHigh_;
 
   outputEnabled_ = true;
   phoneActive_ = true;

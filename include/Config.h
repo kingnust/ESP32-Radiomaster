@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "phone-rc-2026-07-09";
+static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-hb";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.
@@ -18,7 +18,9 @@ static constexpr uint8_t DirectRcWifiChannel = 6;
 static constexpr uint16_t DirectRcSendRateHz = 100;
 static constexpr uint32_t DirectRcStopBurstMs = 140;
 static constexpr uint32_t DirectRcMagic = 0x31524344UL;  // "DRC1" little-endian
-static constexpr uint8_t DirectRcVersion = 1;
+// Must match ESPFC_DRONE_PROTO_DIRECT_RC_LINK_ID in the FC receiver.
+static constexpr uint32_t DirectRcLinkId = 0x6D5A31C7UL;
+static constexpr uint8_t DirectRcVersion = 2;
 
 static constexpr uint32_t UsbSerialBaud = 115200;
 
@@ -40,6 +42,8 @@ static constexpr uint16_t MaxOutputRateHz = 100;
 static constexpr uint16_t PhoneSendRateHz = 50;
 static constexpr uint32_t PhoneStatusIntervalMs = 200;
 static constexpr uint32_t PhoneFrameHoldMs = 250;
+static constexpr uint8_t TrainerMarkerChannel = 6;
+static constexpr uint16_t TrainerHeartbeatDeltaUs = 20;
 
 static constexpr uint32_t HostTimeoutMs = 1000;
 static constexpr uint32_t SafeBurstMs = 300;

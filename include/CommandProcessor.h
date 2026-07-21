@@ -49,6 +49,7 @@ class CommandProcessor {
   RadioProtocol protocol_ = RadioProtocol::Sbus;
   bool protocolChanged_ = false;
   bool sbusInversionChanged_ = false;
+  bool trainerHeartbeatHigh_ = false;
 
   void stopWithSafeBurst(uint32_t nowMs);
   void noteHostActivity();
