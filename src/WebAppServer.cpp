@@ -233,7 +233,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const SEND_MS = 20;
   const MIN = 988, MID = 1500, MAX = 2012;
   const SPAN = (MAX - MIN) / 2;
-  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Marker","Servo","Mode","Beep","Aux6","Aux7","Aux8","Takeover","Aux10","Aux11","Aux12"];
+  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Marker","Servo","Mode","Beep","Aux6","Aux7","Aux8","Takeover","Air","Run","Aux5"];
   const DIRECT_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Servo","Task","Run","Param1","Param2","Param3","Param4","Beep","Reserve"];
   const state = {
     ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
@@ -327,6 +327,9 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       ch[10] = highLow(state.sw.aux7);
       ch[11] = highLow(state.sw.aux8);
       ch[12] = highLow(state.sw.master);
+      ch[13] = highLow(state.sw.air);
+      ch[14] = highLow(state.taskExecute && state.sw.master);
+      ch[15] = highLow(state.sw.aux5);
     } else {
       ch[5] = mode;
       ch[6] = highLow(state.sw.air);
@@ -880,7 +883,7 @@ void WebAppServer::handleWebSocketMessage(const char *message, Print &log) {
   } else {
     commands_.applyPhoneFrame(channelsUs, trainerEnabled, trainerEnabled, now);
   }
-  directRc_.applyPhoneFrame(channelsUs, directEnabled, directConfirmed, now);
+  directRc_.applyPhoneFrame(channelsUs, trainerEnabled, directEnabled, directConfirmed, now);
   phoneFrames_++;
 }
 

@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-hb";
+static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-aux";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.

@@ -76,14 +76,24 @@ bool DirectRcLink::begin(Print &log) {
 }
 
 void DirectRcLink::applyPhoneFrame(const uint16_t channelsUs[Config::ChannelCount],
+                                   bool trainerEnabled,
                                    bool directEnabled,
                                    bool confirmed,
                                    uint32_t nowMs) {
-  if (!channelsUs || !directEnabled || !confirmed) {
-    if (directEnabled_) {
+  Mode requestedMode = Mode::None;
+  if (channelsUs != nullptr) {
+    if (directEnabled && confirmed) {
+      requestedMode = Mode::Direct;
+    } else if (trainerEnabled && !directEnabled) {
+      requestedMode = Mode::TrainerSideband;
+    }
+  }
+
+  if (requestedMode == Mode::None) {
+    if (mode_ != Mode::None) {
       stopBurstUntilMs_ = nowMs + Config::DirectRcStopBurstMs;
     }
-    directEnabled_ = false;
+    mode_ = Mode::None;
     confirmed_ = false;
     return;
   }
@@ -91,8 +101,8 @@ void DirectRcLink::applyPhoneFrame(const uint16_t channelsUs[Config::ChannelCoun
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     channels_[i] = channelsUs[i];
   }
-  directEnabled_ = true;
-  confirmed_ = true;
+  mode_ = requestedMode;
+  confirmed_ = requestedMode == Mode::Direct;
   lastPhoneMs_ = nowMs;
 }
 
@@ -100,35 +110,40 @@ void DirectRcLink::poll(uint32_t nowMs, Print &log) {
   (void)log;
   if (!ready_) return;
 
-  const bool activeNow = active(nowMs);
+  const Mode activeMode = active(nowMs)
+      ? Mode::Direct
+      : (trainerActive(nowMs) ? Mode::TrainerSideband : Mode::None);
   const bool stopping = static_cast<int32_t>(nowMs - stopBurstUntilMs_) < 0;
-  if (!activeNow && !stopping) return;
+  if (activeMode == Mode::None && !stopping) return;
 
   const uint32_t intervalMs = 1000UL / Config::DirectRcSendRateHz;
   if (static_cast<int32_t>(nowMs - nextSendMs_) < 0) return;
   nextSendMs_ = nowMs + intervalMs;
 
-  if (!sendPacket(nowMs, activeNow)) {
+  if (!sendPacket(nowMs, activeMode)) {
     ++sendErrors_;
   } else {
     ++sentFrames_;
   }
 }
 
-bool DirectRcLink::sendPacket(uint32_t nowMs, bool enabled) {
+bool DirectRcLink::sendPacket(uint32_t nowMs, Mode mode) {
   DirectRcPacket packet = {};
   packet.magic = Config::DirectRcMagic;
   packet.linkId = Config::DirectRcLinkId;
   packet.version = Config::DirectRcVersion;
   packet.channelCount = Config::ChannelCount;
-  packet.flags = enabled ? 0x03 : 0x00;  // bit0=enabled, bit1=confirmed
+  // 0x03 remains the explicitly confirmed direct takeover. 0x04 is a
+  // trainer-only AUX sideband and is never allowed to replace RC sticks.
+  packet.flags = mode == Mode::Direct ? 0x03 :
+      (mode == Mode::TrainerSideband ? 0x04 : 0x00);
   packet.sequence = sequence_++;
   packet.timeMs = nowMs;
 
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
-    packet.channels[i] = enabled ? channels_[i] : Config::ChannelMidUs;
+    packet.channels[i] = mode != Mode::None ? channels_[i] : Config::ChannelMidUs;
   }
-  if (!enabled) packet.channels[2] = Config::ChannelMinUs;
+  if (mode == Mode::None) packet.channels[2] = Config::ChannelMinUs;
 
   packet.crc = crc16Ccitt(reinterpret_cast<const uint8_t *>(&packet), sizeof(packet) - sizeof(packet.crc));
   return esp_now_send(kBroadcastPeer, reinterpret_cast<const uint8_t *>(&packet), sizeof(packet)) == ESP_OK;
@@ -137,7 +152,13 @@ bool DirectRcLink::sendPacket(uint32_t nowMs, bool enabled) {
 bool DirectRcLink::ready() const { return ready_; }
 
 bool DirectRcLink::active(uint32_t nowMs) const {
-  return directEnabled_ && confirmed_ && (nowMs - lastPhoneMs_ <= Config::PhoneFrameHoldMs);
+  return mode_ == Mode::Direct && confirmed_ &&
+      (nowMs - lastPhoneMs_ <= Config::PhoneFrameHoldMs);
+}
+
+bool DirectRcLink::trainerActive(uint32_t nowMs) const {
+  return mode_ == Mode::TrainerSideband &&
+      (nowMs - lastPhoneMs_ <= Config::PhoneFrameHoldMs);
 }
 
 bool DirectRcLink::confirmed() const { return confirmed_; }

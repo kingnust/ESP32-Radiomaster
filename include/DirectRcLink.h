@@ -8,6 +8,7 @@ class DirectRcLink {
  public:
   bool begin(Print &log);
   void applyPhoneFrame(const uint16_t channelsUs[Config::ChannelCount],
+                       bool trainerEnabled,
                        bool directEnabled,
                        bool confirmed,
                        uint32_t nowMs);
@@ -15,6 +16,7 @@ class DirectRcLink {
 
   bool ready() const;
   bool active(uint32_t nowMs) const;
+  bool trainerActive(uint32_t nowMs) const;
   bool confirmed() const;
   uint32_t ageMs(uint32_t nowMs) const;
   uint32_t sentFrames() const;
@@ -22,10 +24,16 @@ class DirectRcLink {
   uint16_t sequence() const;
 
  private:
-  bool sendPacket(uint32_t nowMs, bool enabled);
+  enum class Mode : uint8_t {
+    None,
+    TrainerSideband,
+    Direct,
+  };
+
+  bool sendPacket(uint32_t nowMs, Mode mode);
 
   bool ready_ = false;
-  bool directEnabled_ = false;
+  Mode mode_ = Mode::None;
   bool confirmed_ = false;
   uint16_t channels_[Config::ChannelCount] = {};
   uint32_t lastPhoneMs_ = 0;
