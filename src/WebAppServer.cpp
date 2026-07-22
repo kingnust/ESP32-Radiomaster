@@ -64,6 +64,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 .sw b{font-size:10px;letter-spacing:0}
 .sw span{font-size:7px;color:var(--muted);font-weight:800;letter-spacing:0}
 .sw.on{border-color:rgba(80,212,122,.65);background:linear-gradient(180deg,#1f3a2a,#18251d);color:#dcffe7}
+.sw.mid{border-color:rgba(245,189,79,.7);background:#342b1d;color:#fff1cf}
+.sw.high{border-color:rgba(80,212,122,.75);background:#1f3a2a;color:#dcffe7}
 .sw:disabled{opacity:.42}
 .sw.warn.on{border-color:rgba(255,90,102,.75);background:linear-gradient(180deg,#412127,#25181b);color:#ffe1e5}
 .sw.moment.on{border-color:rgba(245,189,79,.75);background:linear-gradient(180deg,#423421,#251f17);color:#fff1cf}
@@ -168,8 +170,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   <section class="switches">
     <button class="sw" id="trainerReady"><b>LINK</b><span>PRIMED</span></button>
     <button class="sw warn" data-toggle="arm"><b>SA</b><span>ARM</span></button>
-    <button class="sw on" data-toggle="angle"><b>SB</b><span>ANGLE</span></button>
-    <button class="sw" data-toggle="air"><b>SC</b><span>AIR</span></button>
+    <button class="sw mid" data-three="sb"><b>SB</b><span>ANGLE</span></button>
+    <button class="sw" data-three="sc"><b>SC</b><span>OFF</span></button>
     <button class="sw moment" data-moment="beep"><b>SD</b><span>BEEP</span></button>
     <button class="sw" data-toggle="aux5"><b>SE</b><span>AUX5</span></button>
     <button class="sw" data-toggle="aux6"><b>SF</b><span>AUX6</span></button>
@@ -211,7 +213,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   <section class="controlStrip">
     <label class="servoControl"><span>SERVO</span><input id="servoRange" type="range" min="0" max="180" step="1" value="90"><b id="servoValue">90</b></label>
-    <button class="modeBtn" data-toggle="hover" id="hoverMode">HOVER</button>
+    <button class="modeBtn" id="hoverMode" disabled>ANGLE</button>
     <select class="taskSelect" id="taskSelect" aria-label="Position task">
       <option value="1">FORWARD 1m</option>
       <option value="2">RIGHT 1m</option>
@@ -237,7 +239,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     route:"trainer", directConfirm:false, directReady:false, directActive:false, directAge:"--", directFrames:0, directErrors:0,
     fcLink:false, deliveredFrames:0, deliveryErrors:0,
     left:{x:0,y:1}, right:{x:0,y:0}, servo:90, task:"1", taskExecute:false,
-    sw:{master:false, arm:false, angle:true, hover:false, air:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
+    three:{sb:1,sc:0},
+    sw:{master:false, arm:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
   };
 
   const $ = (id) => document.getElementById(id);
@@ -246,6 +249,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const axisUs = (v) => us(MID + v * SPAN);
   const throttleUs = (y) => us(MID - y * SPAN);
   const highLow = (v) => v ? MAX : MIN;
+  const threeUs = (v) => v === 2 ? MAX : (v === 1 ? MID : MIN);
 
   const monitor = $("monitor");
   const bars = [];
@@ -307,7 +311,8 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     const throttle = state.sw.cut ? MIN : throttleUs(state.left.y);
     const arm = state.sw.cut ? false : state.sw.arm;
     const servo = us(MIN + (state.servo / 180) * (MAX - MIN));
-    const mode = state.sw.hover ? MAX : (state.sw.angle ? MID : MIN);
+    const mode = threeUs(state.three.sb);
+    const air = threeUs(state.three.sc);
     const taskSelector = {"1":1200,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1000;
     const trainerTask = {"1":1300,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1250;
     const ch = new Array(16).fill(1500);
@@ -327,13 +332,13 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       ch[10] = highLow(state.sw.aux7);
       ch[11] = highLow(state.sw.aux8);
       ch[12] = highLow(state.pageActive);
-      ch[13] = highLow(state.sw.air);
+      ch[13] = air;
       ch[14] = highLow(state.taskExecute);
       ch[15] = (state.seq & 1) ? 1270 : 1230;
     } else {
       ch[4] = highLow(arm);
       ch[5] = mode;
-      ch[6] = highLow(state.sw.air);
+      ch[6] = air;
       ch[7] = highLow(state.taskExecute && state.sw.master);
       ch[8] = taskSelector;
       ch[9] = servo;
@@ -381,12 +386,21 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     $("deadman").classList.toggle("on", state.route === "trainer" ? trainerReady : state.sw.master);
     $("deadman").textContent = state.route === "trainer" ? (fcReady ? "FC LINK - USE TRAINER SWITCH" : (trainerReady ? "WAITING FOR FC" : "PHONE LINK WAIT")) : (state.sw.master ? "PHONE ON" : "PHONE OFF");
     $("servoValue").textContent = state.servo;
-    $("hoverMode").textContent = state.sw.hover ? "HOLD" : (state.sw.angle ? "ANGLE" : "ACRO");
+    const sbNames = ["ACRO","ANGLE","HOLD"];
+    const scNames = ["OFF","MID","AIR"];
+    $("hoverMode").textContent = sbNames[state.three.sb];
     $("taskExecute").classList.toggle("on", state.taskExecute);
     for (const [key, value] of Object.entries(state.sw)) {
       document.querySelectorAll(`[data-toggle="${key}"]`).forEach(btn => btn.classList.toggle("on", value));
     }
     document.querySelectorAll("[data-moment='beep']").forEach(btn => btn.classList.toggle("on", state.sw.beep));
+    document.querySelectorAll("[data-three]").forEach(btn => {
+      const key = btn.dataset.three;
+      const value = state.three[key];
+      btn.classList.toggle("mid", value === 1);
+      btn.classList.toggle("high", value === 2);
+      btn.querySelector("span").textContent = key === "sb" ? sbNames[value] : scNames[value];
+    });
   }
 
   function sendFrame(){
@@ -445,9 +459,16 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       if (key === "master" && !state.sw.master) state.sw.arm = false;
       if (key === "master" && !state.sw.master) state.taskExecute = false;
       if (key === "cut" && state.sw.cut) state.sw.arm = false;
-      if (key === "hover" && state.sw.hover) state.sw.angle = true;
-      if (key === "angle" && !state.sw.angle) state.sw.hover = false;
       updateUi();
+    });
+  });
+
+  document.querySelectorAll("[data-three]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.three;
+      state.three[key] = (state.three[key] + 1) % 3;
+      updateUi();
+      sendFrame();
     });
   });
 
@@ -476,7 +497,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   $("zeroThrottle").addEventListener("click", () => { state.left.y = 1; state.sw.cut = true; state.sw.arm = false; leftStick.render(); updateUi(); });
   $("servoRange").addEventListener("input", e => { state.servo = clamp(Number(e.target.value), 0, 180); updateUi(); });
   $("taskSelect").addEventListener("change", e => { state.task = String(e.target.value); updateUi(); });
-  const taskOn = e => { e.preventDefault(); if (state.sw.hover && (state.route === "trainer" || state.sw.master)) { state.taskExecute = true; updateUi(); sendFrame(); } };
+  const taskOn = e => { e.preventDefault(); if (state.three.sb === 2 && (state.route === "trainer" || state.sw.master)) { state.taskExecute = true; updateUi(); sendFrame(); } };
   const taskOff = e => { e.preventDefault(); if (state.taskExecute) { state.taskExecute = false; updateUi(); sendFrame(); } };
   $("taskExecute").addEventListener("pointerdown", taskOn);
   $("taskExecute").addEventListener("pointerup", taskOff);
