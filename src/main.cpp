@@ -33,13 +33,6 @@ void handleUsbCommands() {
 void serviceRadioOutput(uint32_t nowMs) {
   commands.serviceSafety(nowMs, Serial);
 
-  if (commands.protocolChanged()) {
-    radio.setProtocol(commands.protocol());
-    nextRadioFrameMs = 0;
-    Serial.print(F("Radio UART changed to "));
-    Serial.println(radioProtocolName(commands.protocol()));
-  }
-
   if (commands.sbusInversionChanged()) {
     radio.setSbusInverted(commands.sbusInverted());
     nextRadioFrameMs = 0;
@@ -52,7 +45,8 @@ void serviceRadioOutput(uint32_t nowMs) {
   nextRadioFrameMs = nowMs + frameIntervalMs;
 
   if (commands.shouldSendFrame(nowMs)) {
-    const ChannelState &frameChannels = commands.shouldSendSafeFrame(nowMs) ? safeChannels : channels;
+    ChannelState &frameChannels = commands.shouldSendSafeFrame(nowMs) ? safeChannels : channels;
+    commands.prepareTrainerFrame(frameChannels);
     if (!radio.sendChannels(frameChannels, commands.crsfAddress())) {
       Serial.println(F("ERR failed to write radio frame"));
     }
@@ -67,10 +61,10 @@ void setup() {
   Serial.println(F("ESP32-S3 RadioMaster command bridge"));
   Serial.print(F("Firmware: "));
   Serial.println(Config::FirmwareVersion);
-  Serial.println(F("Output is disabled on boot. Send HELP, then ARM 1 when ready."));
+  Serial.println(F("Stable SBUS trainer stream active; phone takeover is safe on boot."));
 
   safeChannels.resetToSafe();
-  radio.begin(commands.protocol());
+  radio.begin(RadioProtocol::Sbus);
   wifiServer.begin(Serial);
   webApp.begin(Serial);
   directRc.begin(Serial);

@@ -6,7 +6,18 @@
 
 namespace {
 
-constexpr uint8_t kBroadcastPeer[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+volatile uint32_t s_deliveredFrames = 0;
+volatile uint32_t s_deliveryErrors = 0;
+volatile uint32_t s_lastDeliveredMs = 0;
+
+void onPacketSent(const uint8_t *, esp_now_send_status_t status) {
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    ++s_deliveredFrames;
+    s_lastDeliveredMs = millis();
+  } else {
+    ++s_deliveryErrors;
+  }
+}
 
 struct __attribute__((packed)) DirectRcPacket {
   uint32_t magic;
@@ -53,16 +64,25 @@ bool DirectRcLink::begin(Print &log) {
     return false;
   }
 
+  const esp_err_t callbackResult = esp_now_register_send_cb(onPacketSent);
+  if (callbackResult != ESP_OK) {
+    log.print(F("Direct RC delivery callback failed: "));
+    log.println(static_cast<int>(callbackResult));
+    esp_now_deinit();
+    ready_ = false;
+    return false;
+  }
+
   esp_now_peer_info_t peer = {};
-  memcpy(peer.peer_addr, kBroadcastPeer, sizeof(kBroadcastPeer));
+  memcpy(peer.peer_addr, Config::DirectRcPeerMac, sizeof(Config::DirectRcPeerMac));
   peer.channel = Config::DirectRcWifiChannel;
   peer.ifidx = WIFI_IF_AP;
   peer.encrypt = false;
 
-  if (!esp_now_is_peer_exist(kBroadcastPeer)) {
+  if (!esp_now_is_peer_exist(Config::DirectRcPeerMac)) {
     const esp_err_t peerResult = esp_now_add_peer(&peer);
     if (peerResult != ESP_OK) {
-      log.print(F("Direct RC broadcast peer failed: "));
+      log.print(F("Direct RC paired peer failed: "));
       log.println(static_cast<int>(peerResult));
       ready_ = false;
       return false;
@@ -70,8 +90,15 @@ bool DirectRcLink::begin(Print &log) {
   }
 
   ready_ = true;
-  log.print(F("Direct RC ESP-NOW TX ready on Wi-Fi channel "));
-  log.println(Config::DirectRcWifiChannel);
+  log.print(F("Direct RC paired ESP-NOW TX ready on Wi-Fi channel "));
+  log.print(Config::DirectRcWifiChannel);
+  log.print(F(" to "));
+  for (size_t i = 0; i < sizeof(Config::DirectRcPeerMac); ++i) {
+    if (i) log.print(':');
+    if (Config::DirectRcPeerMac[i] < 0x10) log.print('0');
+    log.print(Config::DirectRcPeerMac[i], HEX);
+  }
+  log.println();
   return true;
 }
 
@@ -133,8 +160,8 @@ bool DirectRcLink::sendPacket(uint32_t nowMs, Mode mode) {
   packet.linkId = Config::DirectRcLinkId;
   packet.version = Config::DirectRcVersion;
   packet.channelCount = Config::ChannelCount;
-  // 0x03 remains the explicitly confirmed direct takeover. 0x04 is a
-  // trainer-only AUX sideband and is never allowed to replace RC sticks.
+  // Direct and trainer-sideband packets use distinct authenticated modes so
+  // the FC can apply their separate arm and RadioMaster-safety policies.
   packet.flags = mode == Mode::Direct ? 0x03 :
       (mode == Mode::TrainerSideband ? 0x04 : 0x00);
   packet.sequence = sequence_++;
@@ -146,7 +173,9 @@ bool DirectRcLink::sendPacket(uint32_t nowMs, Mode mode) {
   if (mode == Mode::None) packet.channels[2] = Config::ChannelMinUs;
 
   packet.crc = crc16Ccitt(reinterpret_cast<const uint8_t *>(&packet), sizeof(packet) - sizeof(packet.crc));
-  return esp_now_send(kBroadcastPeer, reinterpret_cast<const uint8_t *>(&packet), sizeof(packet)) == ESP_OK;
+  return esp_now_send(Config::DirectRcPeerMac,
+                      reinterpret_cast<const uint8_t *>(&packet),
+                      sizeof(packet)) == ESP_OK;
 }
 
 bool DirectRcLink::ready() const { return ready_; }
@@ -169,4 +198,10 @@ uint32_t DirectRcLink::ageMs(uint32_t nowMs) const {
 
 uint32_t DirectRcLink::sentFrames() const { return sentFrames_; }
 uint32_t DirectRcLink::sendErrors() const { return sendErrors_; }
+bool DirectRcLink::deliveryFresh(uint32_t nowMs) const {
+  const uint32_t lastDeliveredMs = s_lastDeliveredMs;
+  return lastDeliveredMs != 0 && nowMs - lastDeliveredMs <= Config::DirectRcDeliveryFreshMs;
+}
+uint32_t DirectRcLink::deliveredFrames() const { return s_deliveredFrames; }
+uint32_t DirectRcLink::deliveryErrors() const { return s_deliveryErrors; }
 uint16_t DirectRcLink::sequence() const { return sequence_; }

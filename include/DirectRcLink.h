@@ -21,6 +21,9 @@ class DirectRcLink {
   uint32_t ageMs(uint32_t nowMs) const;
   uint32_t sentFrames() const;
   uint32_t sendErrors() const;
+  bool deliveryFresh(uint32_t nowMs) const;
+  uint32_t deliveredFrames() const;
+  uint32_t deliveryErrors() const;
   uint16_t sequence() const;
 
  private:

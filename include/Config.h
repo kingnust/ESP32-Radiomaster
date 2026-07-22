@@ -4,7 +4,7 @@
 
 namespace Config {
 
-static constexpr const char *FirmwareVersion = "phone-rc-2026-07-21-replace-hb-ch10";
+static constexpr const char *FirmwareVersion = "phone-rc-2026-07-22-sbus-espnow-trainer-v4";
 
 // Wi-Fi AP is used instead of Bluetooth because TCP over Wi-Fi is easier to
 // script from a laptop and gives predictable line-oriented delivery.
@@ -17,6 +17,10 @@ static constexpr uint16_t WifiWebSocketPort = 7778;
 static constexpr uint8_t DirectRcWifiChannel = 6;
 static constexpr uint16_t DirectRcSendRateHz = 100;
 static constexpr uint32_t DirectRcStopBurstMs = 140;
+static constexpr uint32_t DirectRcDeliveryFreshMs = 500;
+// Paired FC station MAC (ESP32-S3 ec:da:3b:4e:39:14). Unicast ESP-NOW gets
+// link-layer acknowledgement and retries; broadcast does not.
+static constexpr uint8_t DirectRcPeerMac[6] = {0xec, 0xda, 0x3b, 0x4e, 0x39, 0x14};
 static constexpr uint32_t DirectRcMagic = 0x31524344UL;  // "DRC1" little-endian
 // Must match ESPFC_DRONE_PROTO_DIRECT_RC_LINK_ID in the FC receiver.
 static constexpr uint32_t DirectRcLinkId = 0x6D5A31C7UL;
@@ -41,7 +45,8 @@ static constexpr uint16_t MaxOutputRateHz = 100;
 
 static constexpr uint16_t PhoneSendRateHz = 50;
 static constexpr uint32_t PhoneStatusIntervalMs = 200;
-static constexpr uint32_t PhoneFrameHoldMs = 250;
+static constexpr uint32_t PhoneFrameHoldMs = 300;
+static constexpr uint8_t TrainerTakeoverChannel = 13;
 static constexpr uint8_t TrainerHeartbeatChannel = 16;
 static constexpr uint16_t TrainerHeartbeatBaseUs = 1250;
 static constexpr uint16_t TrainerHeartbeatDeltaUs = 20;

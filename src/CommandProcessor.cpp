@@ -284,18 +284,6 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
     return;
   }
 
-  if (strcmp(command, "ADDR") == 0) {
-    const char *token = strtok_r(nullptr, " \t", &save);
-    uint32_t address = 0;
-    if (!parseUint(token, address, 16) || address > 0xFF) {
-      out.println(F("ERR usage: ADDR <hex byte, e.g. EE or C8>"));
-      return;
-    }
-    crsfAddress_ = static_cast<uint8_t>(address);
-    out.println(F("OK CRSF address updated"));
-    return;
-  }
-
   if (strcmp(command, "SBUSINV") == 0) {
     bool inverted = false;
     if (!parseOnOff(strtok_r(nullptr, " \t", &save), inverted)) {
@@ -307,30 +295,6 @@ void CommandProcessor::handleLine(const char *line, Print &out) {
     stopWithSafeBurst(millis());
     out.print(F("OK SBUS inverted="));
     out.println(sbusInverted_ ? 1 : 0);
-    return;
-  }
-
-  if (strcmp(command, "PROTO") == 0) {
-    char *token = strtok_r(nullptr, " \t", &save);
-    if (token == nullptr) {
-      out.println(F("ERR usage: PROTO CRSF|SBUS"));
-      return;
-    }
-    upperInPlace(token);
-
-    if (strcmp(token, "CRSF") == 0) {
-      protocol_ = RadioProtocol::Crsf;
-    } else if (strcmp(token, "SBUS") == 0) {
-      protocol_ = RadioProtocol::Sbus;
-    } else {
-      out.println(F("ERR usage: PROTO CRSF|SBUS"));
-      return;
-    }
-
-    protocolChanged_ = true;
-    stopWithSafeBurst(millis());
-    out.print(F("OK protocol set to "));
-    out.println(radioProtocolName(protocol_));
     return;
   }
 
@@ -384,9 +348,6 @@ void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::Channel
                                        bool deadmanHeld,
                                        uint32_t nowMs) {
   if (channelsUs == nullptr || !sendEnabled || !deadmanHeld) {
-    if (phoneActive_ && !timeReached(nowMs, phoneHoldUntilMs_)) {
-      return;
-    }
     if (outputEnabled_ || testActive_) {
       stopWithSafeBurst(nowMs);
     } else {
@@ -397,14 +358,10 @@ void CommandProcessor::applyPhoneFrame(const uint16_t channelsUs[Config::Channel
 
   for (size_t i = 0; i < Config::ChannelCount; ++i) {
     uint16_t value = channelsUs[i];
-    if (i + 1 == Config::TrainerHeartbeatChannel) {
-      value = static_cast<uint16_t>(Config::TrainerHeartbeatBaseUs +
-          (trainerHeartbeatHigh_ ? Config::TrainerHeartbeatDeltaUs
-                                 : -static_cast<int32_t>(Config::TrainerHeartbeatDeltaUs)));
-    }
+    if (i + 1 == Config::TrainerHeartbeatChannel) continue;
+    if (i + 1 == Config::TrainerTakeoverChannel) value = Config::ChannelMaxUs;
     channels_.setTransportUs(static_cast<uint8_t>(i + 1), value);
   }
-  trainerHeartbeatHigh_ = !trainerHeartbeatHigh_;
 
   outputEnabled_ = true;
   phoneActive_ = true;
@@ -421,19 +378,26 @@ void CommandProcessor::stopPhoneControl(uint32_t nowMs) {
   }
 }
 
-bool CommandProcessor::shouldSendFrame(uint32_t nowMs) const {
-  if (phoneActive_) {
-    return !timeReached(nowMs, phoneHoldUntilMs_);
-  }
+void CommandProcessor::prepareTrainerFrame(ChannelState &frameChannels) {
+  const int32_t heartbeat = static_cast<int32_t>(Config::TrainerHeartbeatBaseUs) +
+      (trainerHeartbeatHigh_ ? Config::TrainerHeartbeatDeltaUs
+                             : -static_cast<int32_t>(Config::TrainerHeartbeatDeltaUs));
+  frameChannels.setTransportUs(Config::TrainerHeartbeatChannel,
+                               static_cast<uint16_t>(heartbeat));
+  trainerHeartbeatHigh_ = !trainerHeartbeatHigh_;
+}
 
-  return (outputEnabled_ && (linkFresh(nowMs) ||
-                             (testActive_ && !timeReached(nowMs, testUntilMs_)))) ||
-         linkEnabled_ ||
-         nowMs < safeBurstUntilMs_;
+bool CommandProcessor::shouldSendFrame(uint32_t nowMs) const {
+  (void)nowMs;
+  return true;
 }
 
 bool CommandProcessor::shouldSendSafeFrame(uint32_t nowMs) const {
-  return linkEnabled_ && !outputEnabled_ && !testActive_ && timeReached(nowMs, safeBurstUntilMs_);
+  if (phoneActive_) return timeReached(nowMs, phoneHoldUntilMs_);
+  const bool live = (outputEnabled_ && (linkFresh(nowMs) ||
+                                        (testActive_ && !timeReached(nowMs, testUntilMs_)))) ||
+                    linkEnabled_;
+  return !live;
 }
 
 bool CommandProcessor::outputEnabled() const { return outputEnabled_; }
@@ -534,9 +498,7 @@ void CommandProcessor::printHelp(Print &out) const {
   out.println(F("  TESTRAW <TR 1..16> <988..2012> <100..10000 ms>"));
   out.println(F("  FRAME <16 values for CH11..CH26>"));
   out.println(F("  RATE <10..100>"));
-  out.println(F("  PROTO CRSF|SBUS"));
   out.println(F("  SBUSINV 1|0"));
-  out.println(F("  ADDR <hex byte>        CRSF only; try EE or C8"));
   out.println(F("  UNLOCK_PRIMARY I_UNDERSTAND"));
   out.println(F("  LOCK_PRIMARY"));
 }
@@ -561,9 +523,6 @@ void CommandProcessor::printStatus(Print &out) const {
   out.print(outputRateHz_);
   out.print(F(" sbus_inv="));
   out.print(sbusInverted_ ? 1 : 0);
-  out.print(F(" crsf_addr=0x"));
-  if (crsfAddress_ < 0x10) out.print('0');
-  out.print(crsfAddress_, HEX);
   out.print(F(" primary_unlocked="));
   out.print(channels_.primaryWritesAllowed() ? 1 : 0);
   out.print(F(" host_map=CH"));

@@ -49,7 +49,7 @@ const char kIndexHtml[] =
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{touch-action:none}
 .app{width:100vw;height:100svh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;gap:5px;padding:6px max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
-.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:5px;align-items:center}
+.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;align-items:center}
 .title{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:800;letter-spacing:0;text-transform:uppercase;white-space:nowrap}
 .chips{display:flex;gap:4px;align-items:center;justify-content:flex-end;min-width:0}
 .chip{height:22px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:#151a21;color:var(--muted);display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;white-space:nowrap}
@@ -64,6 +64,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 .sw b{font-size:10px;letter-spacing:0}
 .sw span{font-size:7px;color:var(--muted);font-weight:800;letter-spacing:0}
 .sw.on{border-color:rgba(80,212,122,.65);background:linear-gradient(180deg,#1f3a2a,#18251d);color:#dcffe7}
+.sw:disabled{opacity:.42}
 .sw.warn.on{border-color:rgba(255,90,102,.75);background:linear-gradient(180deg,#412127,#25181b);color:#ffe1e5}
 .sw.moment.on{border-color:rgba(245,189,79,.75);background:linear-gradient(180deg,#423421,#251f17);color:#fff1cf}
 .deck{min-height:0;display:grid;grid-template-columns:minmax(130px,1fr) minmax(118px,.72fr) minmax(130px,1fr);gap:5px;align-items:stretch}
@@ -162,14 +163,10 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       <button id="routeTrainer" class="active">TRAINER</button>
       <button id="routeDirect">DIRECT</button>
     </div>
-    <div class="seg protoSeg">
-      <button id="protoCrsf">CRSF</button>
-      <button id="protoSbus" class="active">SBUS</button>
-    </div>
   </section>
 
   <section class="switches">
-    <button class="sw warn" data-toggle="master"><b>TRN</b><span>PHONE</span></button>
+    <button class="sw" id="trainerReady"><b>LINK</b><span>PRIMED</span></button>
     <button class="sw warn" data-toggle="arm"><b>SA</b><span>ARM</span></button>
     <button class="sw on" data-toggle="angle"><b>SB</b><span>ANGLE</span></button>
     <button class="sw" data-toggle="air"><b>SC</b><span>AIR</span></button>
@@ -233,11 +230,12 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   const SEND_MS = 20;
   const MIN = 988, MID = 1500, MAX = 2012;
   const SPAN = (MAX - MIN) / 2;
-  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Run","Task","Servo","Aux5","Aux6","Aux7","Aux8","Beep","Heartbeat"];
+  const TRAINER_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Task","Servo","Mode","Beep","Aux6","Aux7","Aux8","Takeover","Air","Run","Heartbeat"];
   const DIRECT_NAMES = ["Roll","Pitch","Thr","Yaw","Arm","Mode","Air","Run","Task","Servo","Param1","Param2","Param3","Param4","Beep","Reserve"];
   const state = {
-    ws:null, connected:false, deadman:false, seq:0, serverFrames:0, serverErrors:0,
+    ws:null, connected:false, pageActive:true, deadman:false, seq:0, serverFrames:0, serverErrors:0,
     route:"trainer", directConfirm:false, directReady:false, directActive:false, directAge:"--", directFrames:0, directErrors:0,
+    fcLink:false, deliveredFrames:0, deliveryErrors:0,
     left:{x:0,y:1}, right:{x:0,y:0}, servo:90, task:"1", taskExecute:false,
     sw:{master:false, arm:false, angle:true, hover:false, air:false, beep:false, aux5:false, aux6:false, aux7:false, aux8:false, cut:false}
   };
@@ -311,27 +309,29 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     const servo = us(MIN + (state.servo / 180) * (MAX - MIN));
     const mode = state.sw.hover ? MAX : (state.sw.angle ? MID : MIN);
     const taskSelector = {"1":1200,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1000;
+    const trainerTask = {"1":1300,"2":1400,"3":1600,"4":1800,"5":2000}[state.task] || 1250;
     const ch = new Array(16).fill(1500);
     ch[0] = axisUs(state.right.x);
     ch[1] = axisUs(-state.right.y);
     ch[2] = throttle;
     ch[3] = axisUs(state.left.x);
-    ch[4] = highLow(arm);
     if (state.route === "trainer") {
-      // EdgeTX Trainer -> Chans replaces the RadioMaster outputs directly, so
-      // trainer data must use the same CH1-CH16 layout as the receiver.
-      ch[5] = mode;
-      ch[6] = highLow(state.sw.air);
-      ch[7] = highLow(state.taskExecute && state.sw.master);
-      ch[8] = taskSelector;
-      ch[9] = servo;
-      ch[10] = highLow(state.sw.aux5);
-      ch[11] = highLow(state.sw.aux6);
-      ch[12] = highLow(state.sw.aux7);
-      ch[13] = highLow(state.sw.aux8);
-      ch[14] = highLow(state.sw.beep);
-      ch[15] = 1250;
+      // The FC accepts this complete frame only after a safe physical CH11
+      // rising edge. Once latched, trainer owns arm and every flight control.
+      ch[4] = highLow(arm);
+      ch[5] = trainerTask;
+      ch[6] = servo;
+      ch[7] = mode;
+      ch[8] = highLow(state.sw.beep);
+      ch[9] = highLow(state.sw.aux6);
+      ch[10] = highLow(state.sw.aux7);
+      ch[11] = highLow(state.sw.aux8);
+      ch[12] = highLow(state.pageActive);
+      ch[13] = highLow(state.sw.air);
+      ch[14] = highLow(state.taskExecute);
+      ch[15] = (state.seq & 1) ? 1270 : 1230;
     } else {
+      ch[4] = highLow(arm);
       ch[5] = mode;
       ch[6] = highLow(state.sw.air);
       ch[7] = highLow(state.taskExecute && state.sw.master);
@@ -348,7 +348,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   function updateBars(ch){
     for (let i=0;i<16;i++) {
-      bars[i].n.textContent = state.route === "trainer" ? `TR${i+1}->CH${i+1} ${TRAINER_NAMES[i]}` : `CH${i+1} ${DIRECT_NAMES[i]}`;
+      bars[i].n.textContent = state.route === "trainer" ? `TR${i+1} ${TRAINER_NAMES[i]}` : `CH${i+1} ${DIRECT_NAMES[i]}`;
       bars[i].v.textContent = ch[i];
       bars[i].f.style.width = `${clamp((ch[i]-1000)/10, 0, 100)}%`;
     }
@@ -358,17 +358,18 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   function updateUi(){
     const ch = channels();
-    const trainerActive = state.connected && state.sw.master && state.route === "trainer";
+    const trainerReady = state.connected && state.pageActive && state.route === "trainer";
+    const fcReady = trainerReady && state.fcLink;
     const directActive = state.connected && state.sw.master && state.route === "direct" && state.directConfirm;
-    const active = trainerActive || directActive;
+    const active = trainerReady || directActive;
     updateBars(ch);
     setChip($("linkChip"), state.connected);
     setChip($("sendChip"), active);
     $("linkText").textContent = state.connected ? "ONLINE" : "OFFLINE";
-    $("sendText").textContent = directActive ? "DIRECT" : (trainerActive ? "TRAINER" : "RADIO");
-    $("outState").textContent = directActive ? "direct" : (trainerActive ? "trainer" : "radio");
+    $("sendText").textContent = directActive ? "DIRECT" : (fcReady ? "FC LINK" : (trainerReady ? "PRIMED" : "RADIO"));
+    $("outState").textContent = directActive ? "direct" : (fcReady ? "radio / fc ready" : (trainerReady ? "radio / no fc" : "radio"));
     $("outState").className = active ? "good" : "";
-    $("routeState").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT OK" : "DIRECT ?") : "TRAINER";
+    $("routeState").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT OK" : "DIRECT ?") : (fcReady ? "WAIT SWITCH" : (trainerReady ? "FC OFFLINE" : "NO LINK"));
     $("routeState").className = directActive ? "good" : (state.route === "direct" ? "warnText" : "");
     $("frameState").textContent = state.route === "direct" ? (state.directFrames || 0) : (state.serverFrames || state.seq);
     $("routeTrainer").classList.toggle("active", state.route === "trainer");
@@ -376,8 +377,9 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     $("directConfirm").classList.toggle("danger", state.route === "direct" && !state.directConfirm);
     $("directConfirm").classList.toggle("good", state.route === "direct" && state.directConfirm);
     $("directConfirm").textContent = state.route === "direct" ? (state.directConfirm ? "DIRECT CONFIRMED" : "ARE YOU SURE?") : "CONFIRM DIRECT";
-    $("deadman").classList.toggle("on", state.sw.master);
-    $("deadman").textContent = state.sw.master ? "PHONE ON" : "PHONE OFF";
+    $("trainerReady").classList.toggle("on", fcReady);
+    $("deadman").classList.toggle("on", state.route === "trainer" ? trainerReady : state.sw.master);
+    $("deadman").textContent = state.route === "trainer" ? (fcReady ? "FC LINK - USE TRAINER SWITCH" : (trainerReady ? "WAITING FOR FC" : "PHONE LINK WAIT")) : (state.sw.master ? "PHONE ON" : "PHONE OFF");
     $("servoValue").textContent = state.servo;
     $("hoverMode").textContent = state.sw.hover ? "HOLD" : (state.sw.angle ? "ANGLE" : "ACRO");
     $("taskExecute").classList.toggle("on", state.taskExecute);
@@ -390,7 +392,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   function sendFrame(){
     const ch = channels();
     if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-    const trainer = state.route === "trainer" && state.sw.master ? 1 : 0;
+    const trainer = state.route === "trainer" && state.pageActive ? 1 : 0;
     const direct = state.route === "direct" && state.sw.master && state.directConfirm ? 1 : 0;
     const confirm = state.route === "direct" && state.directConfirm ? 1 : 0;
     state.ws.send(["P", state.seq++, trainer, direct, confirm, ...ch].join(","));
@@ -403,7 +405,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   function connect(){
     const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}/rc`);
     state.ws = ws;
-    ws.onopen = () => { state.connected = true; updateUi(); ws.send("Q"); };
+    ws.onopen = () => { state.connected = true; state.pageActive = !document.hidden; updateUi(); ws.send("Q"); };
     ws.onclose = () => {
       state.connected = false;
       state.deadman = false;
@@ -422,8 +424,6 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     if (!text.startsWith("S,")) return;
     const p = text.split(",");
     $("ageState").textContent = `${p[3] || "--"} ms`;
-    $("protoCrsf").classList.toggle("active", p[5] === "CRSF");
-    $("protoSbus").classList.toggle("active", p[5] === "SBUS");
     state.serverFrames = Number(p[7] || 0);
     state.serverErrors = Number(p[8] || 0);
     state.directReady = p[9] === "1";
@@ -431,6 +431,9 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
     state.directAge = p[11] || "--";
     state.directFrames = Number(p[12] || 0);
     state.directErrors = Number(p[13] || 0);
+    state.fcLink = p[14] === "1";
+    state.deliveredFrames = Number(p[15] || 0);
+    state.deliveryErrors = Number(p[16] || 0);
     updateUi();
   }
 
@@ -460,6 +463,7 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
 
   $("deadman").addEventListener("click", e => {
     e.preventDefault();
+    if (state.route === "trainer") return;
     if (state.route === "direct" && !state.directConfirm) state.sw.master = false;
     else state.sw.master = !state.sw.master;
     if (!state.sw.master) { state.sw.arm = false; state.taskExecute = false; }
@@ -472,16 +476,15 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
   $("zeroThrottle").addEventListener("click", () => { state.left.y = 1; state.sw.cut = true; state.sw.arm = false; leftStick.render(); updateUi(); });
   $("servoRange").addEventListener("input", e => { state.servo = clamp(Number(e.target.value), 0, 180); updateUi(); });
   $("taskSelect").addEventListener("change", e => { state.task = String(e.target.value); updateUi(); });
-  const taskOn = e => { e.preventDefault(); if (state.sw.master && state.sw.hover) { state.taskExecute = true; updateUi(); sendFrame(); } };
+  const taskOn = e => { e.preventDefault(); if (state.sw.hover && (state.route === "trainer" || state.sw.master)) { state.taskExecute = true; updateUi(); sendFrame(); } };
   const taskOff = e => { e.preventDefault(); if (state.taskExecute) { state.taskExecute = false; updateUi(); sendFrame(); } };
   $("taskExecute").addEventListener("pointerdown", taskOn);
   $("taskExecute").addEventListener("pointerup", taskOff);
   $("taskExecute").addEventListener("pointercancel", taskOff);
   $("taskExecute").addEventListener("pointerleave", taskOff);
-  $("protoCrsf").addEventListener("click", () => sendCommand("PROTO CRSF"));
-  $("protoSbus").addEventListener("click", () => sendCommand("PROTO SBUS"));
 
   document.addEventListener("visibilitychange", () => {
+    state.pageActive = !document.hidden;
     if (document.hidden) {
       state.deadman = false;
       state.sw.master = false;
@@ -490,9 +493,11 @@ button{font:inherit;color:inherit;border:0;background:none;touch-action:manipula
       state.directConfirm = false;
       sendFrame();
     }
+    updateUi();
   });
 
   window.addEventListener("beforeunload", () => {
+    state.pageActive = false;
     state.deadman = false;
     state.sw.master = false;
     state.sw.arm = false;
@@ -884,9 +889,9 @@ void WebAppServer::handleWebSocketMessage(const char *message, Print &log) {
   } else {
     commands_.applyPhoneFrame(channelsUs, trainerEnabled, trainerEnabled, now);
   }
-  // Trainer frames are replaced inside EdgeTX and then travel through ELRS.
-  // ESP-NOW is reserved for explicitly confirmed direct takeover only.
-  directRc_.applyPhoneFrame(channelsUs, false, directEnabled, directConfirmed, now);
+  // Trainer sideband carries one atomic phone frame to the FC. RadioMaster
+  // retains the independent CH11 permit and receiver-link failsafe.
+  directRc_.applyPhoneFrame(channelsUs, trainerEnabled, directEnabled, directConfirmed, now);
   phoneFrames_++;
 }
 
@@ -936,7 +941,7 @@ void WebAppServer::sendStatus() {
   char status[420];
   size_t used = snprintf(status,
                          sizeof(status),
-                         "S,%lu,%u,%lu,%u,%s,%u,%lu,%lu,%u,%u,%lu,%lu,%lu",
+                         "S,%lu,%u,%lu,%u,%s,%u,%lu,%lu,%u,%u,%lu,%lu,%lu,%u,%lu,%lu",
                          static_cast<unsigned long>(now),
                          commands_.outputEnabled() ? 1 : 0,
                          static_cast<unsigned long>(commands_.lastHostMs() ? now - commands_.lastHostMs() : 0),
@@ -949,7 +954,10 @@ void WebAppServer::sendStatus() {
                          directRc_.active(now) ? 1 : 0,
                          static_cast<unsigned long>(directRc_.ageMs(now)),
                          static_cast<unsigned long>(directRc_.sentFrames()),
-                         static_cast<unsigned long>(directRc_.sendErrors()));
+                         static_cast<unsigned long>(directRc_.sendErrors()),
+                         directRc_.deliveryFresh(now) ? 1 : 0,
+                         static_cast<unsigned long>(directRc_.deliveredFrames()),
+                         static_cast<unsigned long>(directRc_.deliveryErrors()));
   if (used >= sizeof(status)) return;
 
   for (size_t i = 0; i < Config::ChannelCount && used < sizeof(status); ++i) {
